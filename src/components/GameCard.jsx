@@ -41,7 +41,7 @@ export default function GameCard({ game, variant = 'standard' }) {
       {/* Card Content */}
       <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
         <div>
-          {/* Genre & Tag */}
+          {/* Genre & Developer Tag */}
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-xs font-medium text-indigo-400">
               {game.genre}
@@ -61,7 +61,7 @@ export default function GameCard({ game, variant = 'standard' }) {
             {game.title}
           </h3>
 
-          {/* Short Description (if standard/detailed) */}
+          {/* Short Description */}
           {variant !== 'compact' && game.description && (
             <p className="text-xs text-slate-400 line-clamp-2 mt-1.5 leading-relaxed">
               {game.description}
@@ -78,7 +78,7 @@ export default function GameCard({ game, variant = 'standard' }) {
           </div>
 
           {/* Variant-specific meta */}
-          {variant === 'popular' && game.fileSize && (
+          {(variant === 'popular' || variant === 'browse') && game.fileSize && (
             <div className="flex items-center gap-1 text-slate-400">
               <HardDrive className="w-3.5 h-3.5 text-slate-500" />
               <span>{game.fileSize}</span>
