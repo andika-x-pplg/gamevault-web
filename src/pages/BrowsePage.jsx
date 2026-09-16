@@ -1,33 +1,21 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Search,
   X,
   SlidersHorizontal,
   ArrowUpDown,
-  Calendar,
   Layers,
   RotateCcw,
   SearchX,
   ChevronDown,
   Sparkles,
+  Loader2,
 } from 'lucide-react'
-import { useGame } from '../context/useGame'
 import GameCard from '../components/GameCard'
-
-const GENRES = [
-  'All',
-  'Action',
-  'Adventure',
-  'RPG',
-  'Racing',
-  'Strategy',
-  'Simulation',
-  'Sports',
-  'Indie',
-  'Horror',
-  'Multiplayer',
-]
+import GameCardSkeleton from '../components/GameCardSkeleton'
+import ErrorState from '../components/ErrorState'
+import { getGames, getCategories } from '../services/gameService'
 
 const SORT_OPTIONS = [
   { id: 'popular', label: 'Most Popular' },
@@ -35,14 +23,6 @@ const SORT_OPTIONS = [
   { id: 'newest', label: 'Newest' },
   { id: 'rating', label: 'Highest Rated' },
   { id: 'title-asc', label: 'A-Z' },
-]
-
-const YEAR_OPTIONS = [
-  { id: 'all', label: 'All Years' },
-  { id: '2026', label: '2026' },
-  { id: '2025', label: '2025' },
-  { id: '2024', label: '2024' },
-  { id: 'older', label: 'Older' },
 ]
 
 const TYPE_OPTIONS = [
@@ -53,37 +33,60 @@ const TYPE_OPTIONS = [
   { id: 'Demo', label: 'Demo' },
 ]
 
-const INITIAL_PAGE_SIZE = 8
-const LOAD_MORE_STEP = 8
+const PAGE_SIZE = 8
 
 export default function BrowsePage() {
-  const { publishedGames: games } = useGame()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Read state directly from URL Query Parameters (Single Source of Truth)
-  const genreParam = searchParams.get('genre') || 'All'
-  const selectedGenre =
-    GENRES.find((g) => g.toLowerCase() === genreParam.toLowerCase()) || 'All'
-
+  // Read filters from URL
+  const selectedGenre = searchParams.get('genre') || 'all'
   const searchQuery = searchParams.get('search') || ''
-  const sortBy = searchParams.get('sort') || (searchParams.get('filter') === 'trending' ? 'popular' : 'popular')
-  const selectedYear = searchParams.get('year') || 'all'
+  const sortBy = searchParams.get('sort') || 'popular'
   const selectedType = searchParams.get('type') || 'all'
 
-  // Pagination state
-  const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE)
+  // Local state for debounced search input text
+  const [searchInput, setSearchInput] = useState(searchQuery)
 
-  // Update URL parameters dynamically without full reload
-  const updateParams = (updates) => {
+  // API Data State
+  const [games, setGames] = useState([])
+  const [categories, setCategories] = useState([])
+  const [meta, setMeta] = useState({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    has_more_pages: false,
+  })
+
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState(null)
+  const [retryTrigger, setRetryTrigger] = useState(0)
+
+  // Fetch available categories for filter chips
+  useEffect(() => {
+    let isMounted = true
+    getCategories()
+      .then((cats) => {
+        if (isMounted) setCategories(cats)
+      })
+      .catch((err) => {
+        console.error('Failed to load categories for browse filters:', err)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Helper to update search params
+  const updateParams = useCallback((updates) => {
     const params = new URLSearchParams(searchParams)
 
-    // Remove legacy 'filter' if explicit sort or other params are set
     if (params.has('filter')) {
       params.delete('filter')
     }
 
     Object.entries(updates).forEach(([key, val]) => {
-      if (val && val !== 'All' && val !== 'all' && val !== 'popular') {
+      if (val && val !== 'all' && val !== 'All' && val !== 'popular') {
         params.set(key, val)
       } else {
         params.delete(key)
@@ -91,118 +94,127 @@ export default function BrowsePage() {
     })
 
     setSearchParams(params, { replace: true })
-    setVisibleCount(INITIAL_PAGE_SIZE)
+  }, [searchParams, setSearchParams])
+
+  // Debounced search trigger
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== searchQuery) {
+        updateParams({ search: searchInput })
+      }
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [searchInput, searchQuery, updateParams])
+
+  // Fetch Games from API with AbortController to avoid race conditions
+  useEffect(() => {
+    const controller = new AbortController()
+
+    getGames(
+      {
+        search: searchQuery,
+        category: selectedGenre,
+        type: selectedType,
+        sort: sortBy,
+        page: 1,
+        per_page: PAGE_SIZE,
+      },
+      { signal: controller.signal }
+    )
+      .then((res) => {
+        setGames(res.games)
+        setMeta(res.meta)
+        setError(null)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (err.name === 'CanceledError' || err.name === 'AbortError') {
+          return
+        }
+        console.error('Failed to load games in BrowsePage:', err)
+        setError('Gagal memuat daftar game dari server. Silakan coba kembali.')
+        setLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [searchQuery, selectedGenre, selectedType, sortBy, retryTrigger])
+
+  const handleRetry = () => {
+    setLoading(true)
+    setError(null)
+    setRetryTrigger((prev) => prev + 1)
   }
 
-  const handleGenreChange = (genre) => {
-    updateParams({ genre })
+  // Load More Next Page
+  const handleLoadMore = async () => {
+    if (!meta.has_more_pages || loadingMore) return
+
+    setLoadingMore(true)
+    const nextPage = (meta.current_page || 1) + 1
+
+    try {
+      const res = await getGames({
+        search: searchQuery,
+        category: selectedGenre,
+        type: selectedType,
+        sort: sortBy,
+        page: nextPage,
+        per_page: PAGE_SIZE,
+      })
+
+      // Append new unique games
+      setGames((prev) => {
+        const existingIds = new Set(prev.map((g) => g.id))
+        const newUnique = res.games.filter((g) => !existingIds.has(g.id))
+        return [...prev, ...newUnique]
+      })
+      setMeta(res.meta)
+    } catch (err) {
+      console.error('Failed to load more games:', err)
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
-  const handleSearchChange = (e) => {
-    updateParams({ search: e.target.value })
-  }
-
-  const handleClearSearch = () => {
-    updateParams({ search: '' })
-  }
-
-  const handleYearChange = (e) => {
-    updateParams({ year: e.target.value })
+  const handleGenreChange = (genreSlug) => {
+    setLoading(true)
+    updateParams({ genre: genreSlug })
   }
 
   const handleTypeChange = (e) => {
+    setLoading(true)
     updateParams({ type: e.target.value })
   }
 
   const handleSortChange = (e) => {
+    setLoading(true)
     updateParams({ sort: e.target.value })
   }
 
-  const handleResetFilters = () => {
-    setSearchParams({}, { replace: true })
-    setVisibleCount(INITIAL_PAGE_SIZE)
+  const handleClearSearch = () => {
+    setSearchInput('')
+    setLoading(true)
+    updateParams({ search: '' })
   }
 
-  // Filter and sort pipeline with useMemo
-  const filteredAndSortedGames = useMemo(() => {
-    let result = [...games]
-
-    // 1. Search filter (title, genre, developer, description)
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(
-        (g) =>
-          g.title.toLowerCase().includes(query) ||
-          g.genre.toLowerCase().includes(query) ||
-          (g.developer && g.developer.toLowerCase().includes(query)) ||
-          (g.genres && g.genres.some((genreItem) => genreItem.toLowerCase().includes(query))) ||
-          g.description.toLowerCase().includes(query),
-      )
-    }
-
-    // 2. Genre filter
-    if (selectedGenre !== 'All') {
-      result = result.filter(
-        (g) =>
-          g.genre.toLowerCase() === selectedGenre.toLowerCase() ||
-          (g.genres &&
-            g.genres.some((genreItem) => genreItem.toLowerCase() === selectedGenre.toLowerCase())),
-      )
-    }
-
-    // 3. Release Year filter
-    if (selectedYear !== 'all') {
-      if (selectedYear === 'older') {
-        result = result.filter((g) => {
-          const year = parseInt(g.releaseDate.split('-')[0], 10)
-          return year < 2024
-        })
-      } else {
-        result = result.filter((g) => g.releaseDate.startsWith(selectedYear))
-      }
-    }
-
-    // 4. Game Type / License filter
-    if (selectedType !== 'all') {
-      result = result.filter(
-        (g) => g.license.toLowerCase() === selectedType.toLowerCase(),
-      )
-    }
-
-    // 5. Sorting
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'downloads':
-          return (b.downloadCount || 0) - (a.downloadCount || 0)
-        case 'newest':
-          return new Date(b.releaseDate).getTime() - new Date(a.releaseDate).getTime()
-        case 'rating':
-          return b.rating - a.rating
-        case 'title-asc':
-          return a.title.localeCompare(b.title)
-        case 'popular':
-        default:
-          return (b.downloadCount || 0) * (b.rating || 1) - (a.downloadCount || 0) * (a.rating || 1)
-      }
-    })
-
-    return result
-  }, [games, searchQuery, selectedGenre, selectedYear, selectedType, sortBy])
-
-  // Games currently visible on page
-  const visibleGames = filteredAndSortedGames.slice(0, visibleCount)
-  const hasMore = visibleCount < filteredAndSortedGames.length
-
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + LOAD_MORE_STEP)
+  const handleResetFilters = () => {
+    setSearchInput('')
+    setLoading(true)
+    setSearchParams({}, { replace: true })
   }
 
   const isFiltered =
     searchQuery.trim() !== '' ||
-    selectedGenre !== 'All' ||
-    selectedYear !== 'all' ||
-    selectedType !== 'all' ||
+    (selectedGenre && selectedGenre.toLowerCase() !== 'all') ||
+    (selectedType && selectedType.toLowerCase() !== 'all') ||
     sortBy !== 'popular'
+
+  const selectedCategoryObj = categories.find(
+    (c) => c.slug.toLowerCase() === selectedGenre.toLowerCase()
+  )
 
   return (
     <div className="space-y-8 py-4">
@@ -227,12 +239,15 @@ export default function BrowsePage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Cari berdasarkan judul, genre, atau developer..."
-                value={searchQuery}
-                onChange={handleSearchChange}
+                placeholder="Cari berdasarkan judul atau developer..."
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value)
+                  setLoading(true)
+                }}
                 className="w-full bg-[#0B0E14]/90 border border-slate-700/80 focus:border-indigo-500 rounded-2xl pl-12 pr-11 py-3.5 text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all shadow-inner"
               />
-              {searchQuery && (
+              {searchInput && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
@@ -255,10 +270,10 @@ export default function BrowsePage() {
             <Layers className="w-3.5 h-3.5 text-indigo-400" />
             Filter Genre
           </span>
-          {selectedGenre !== 'All' && (
+          {selectedGenre !== 'all' && (
             <button
               type="button"
-              onClick={() => handleGenreChange('All')}
+              onClick={() => handleGenreChange('all')}
               className="text-xs text-indigo-400 hover:underline cursor-pointer"
             >
               Reset Genre
@@ -268,27 +283,39 @@ export default function BrowsePage() {
 
         {/* Scrollable / Wrap Filter Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none no-scrollbar flex-nowrap sm:flex-wrap">
-          {GENRES.map((genre) => {
-            const isSelected = selectedGenre.toLowerCase() === genre.toLowerCase()
+          <button
+            type="button"
+            onClick={() => handleGenreChange('all')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+              selectedGenre.toLowerCase() === 'all'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/30 border border-indigo-500/50 scale-102'
+                : 'bg-[#111726] hover:bg-[#161F33] text-slate-300 hover:text-white border border-slate-800'
+            }`}
+          >
+            All Genres
+          </button>
+
+          {categories.map((cat) => {
+            const isSelected = selectedGenre.toLowerCase() === cat.slug.toLowerCase()
             return (
               <button
-                key={genre}
+                key={cat.id}
                 type="button"
-                onClick={() => handleGenreChange(genre)}
+                onClick={() => handleGenreChange(cat.slug)}
                 className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                   isSelected
                     ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/30 border border-indigo-500/50 scale-102'
                     : 'bg-[#111726] hover:bg-[#161F33] text-slate-300 hover:text-white border border-slate-800'
                 }`}
               >
-                {genre}
+                {cat.name}
               </button>
             )
           })}
         </div>
       </section>
 
-      {/* 3. Toolbar: Additional Filters (Year, Type) + Sorting Dropdown + Reset */}
+      {/* 3. Toolbar: Type Filter + Sorting Dropdown + Reset */}
       <section className="p-4 sm:p-5 rounded-2xl bg-[#111726]/80 border border-slate-800/90 shadow-md">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Left: Filter dropdowns */}
@@ -299,7 +326,7 @@ export default function BrowsePage() {
             </div>
 
             {/* Game Type Filter */}
-            <div className="relative min-w-[130px]">
+            <div className="relative min-w-[140px]">
               <select
                 value={selectedType}
                 onChange={handleTypeChange}
@@ -313,23 +340,6 @@ export default function BrowsePage() {
                 ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-            </div>
-
-            {/* Release Year Filter */}
-            <div className="relative min-w-[120px]">
-              <select
-                value={selectedYear}
-                onChange={handleYearChange}
-                className="w-full appearance-none bg-[#0B0E14] border border-slate-800 hover:border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2 pr-8 text-xs font-medium text-slate-200 focus:outline-none transition-colors cursor-pointer"
-                aria-label="Filter Release Year"
-              >
-                {YEAR_OPTIONS.map((year) => (
-                  <option key={year.id} value={year.id}>
-                    {year.label}
-                  </option>
-                ))}
-              </select>
-              <Calendar className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Reset Filter Button */}
@@ -375,32 +385,42 @@ export default function BrowsePage() {
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
         <div className="text-sm font-semibold text-white flex items-center gap-2">
           <span>
-            {filteredAndSortedGames.length}{' '}
-            {filteredAndSortedGames.length === 1 ? 'Game Found' : 'Games Found'}
+            {meta.total} {meta.total === 1 ? 'Game Found' : 'Games Found'}
           </span>
           {searchQuery && (
             <span className="text-xs font-normal text-slate-400">
               for &ldquo;<strong className="text-indigo-300">{searchQuery}</strong>&rdquo;
             </span>
           )}
-          {selectedGenre !== 'All' && (
+          {selectedCategoryObj && (
             <span className="text-xs font-normal text-slate-400">
-              in <strong className="text-indigo-300">{selectedGenre}</strong>
+              in <strong className="text-indigo-300">{selectedCategoryObj.name}</strong>
             </span>
           )}
         </div>
 
-        {/* Display count info */}
-        {filteredAndSortedGames.length > 0 && (
+        {meta.total > 0 && (
           <span className="text-xs text-slate-400">
-            Showing {Math.min(visibleCount, filteredAndSortedGames.length)} of{' '}
-            {filteredAndSortedGames.length} games
+            Showing {games.length} of {meta.total} games
           </span>
         )}
       </section>
 
-      {/* 5. Game Grid or Empty State */}
-      {filteredAndSortedGames.length === 0 ? (
+      {/* 5. Error State */}
+      {error ? (
+        <ErrorState
+          title="Gagal Memuat Katalog Game"
+          message={error}
+          onRetry={handleRetry}
+        />
+      ) : loading ? (
+        /* Loading Skeleton Grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {Array.from({ length: PAGE_SIZE }).map((_, idx) => (
+            <GameCardSkeleton key={idx} />
+          ))}
+        </div>
+      ) : games.length === 0 ? (
         /* Empty State */
         <section className="py-20 text-center rounded-3xl bg-[#111726]/40 border border-slate-800/80 p-8 space-y-4">
           <div className="inline-flex p-4 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-lg">
@@ -424,31 +444,41 @@ export default function BrowsePage() {
           </div>
         </section>
       ) : (
-        /* Game Grid */
+        /* Game Grid & Load More */
         <section className="space-y-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {visibleGames.map((game) => (
+            {games.map((game) => (
               <GameCard key={game.id} game={game} variant="browse" />
             ))}
           </div>
 
           {/* Load More Button */}
-          {hasMore ? (
+          {meta.has_more_pages ? (
             <div className="text-center pt-4">
               <button
                 type="button"
+                disabled={loadingMore}
                 onClick={handleLoadMore}
-                className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-[#161F33] hover:bg-[#1E2942] text-slate-200 hover:text-white font-semibold text-sm border border-slate-700/80 hover:border-indigo-500/50 shadow-lg hover:shadow-indigo-500/10 transition-all duration-200 cursor-pointer"
+                className="inline-flex items-center gap-2 px-8 py-3 rounded-2xl bg-[#161F33] hover:bg-[#1E2942] disabled:opacity-60 text-slate-200 hover:text-white font-semibold text-sm border border-slate-700/80 hover:border-indigo-500/50 shadow-lg hover:shadow-indigo-500/10 transition-all duration-200 cursor-pointer"
               >
-                <span>Load More Games</span>
-                <span className="text-xs text-indigo-400">
-                  (+{Math.min(LOAD_MORE_STEP, filteredAndSortedGames.length - visibleCount)})
-                </span>
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                    <span>Loading more games...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Load More Games</span>
+                    <span className="text-xs text-indigo-400">
+                      (+{Math.min(PAGE_SIZE, meta.total - games.length)})
+                    </span>
+                  </>
+                )}
               </button>
             </div>
-          ) : filteredAndSortedGames.length > INITIAL_PAGE_SIZE ? (
+          ) : meta.total > PAGE_SIZE ? (
             <div className="text-center pt-4 text-xs text-slate-500">
-              Semua {filteredAndSortedGames.length} game telah ditampilkan
+              Semua {meta.total} game telah ditampilkan
             </div>
           ) : null}
         </section>

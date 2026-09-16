@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   Star,
@@ -12,20 +12,25 @@ import {
   Compass,
   FileText,
 } from 'lucide-react'
-import { useGame } from '../context/useGame'
 import { useLibrary } from '../context/useLibrary'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 import GameInformation from '../components/GameInformation'
 import SystemRequirements from '../components/SystemRequirements'
 import DownloadSection from '../components/DownloadSection'
 import SimilarGames from '../components/SimilarGames'
+import HeroSkeleton from '../components/HeroSkeleton'
+import ErrorState from '../components/ErrorState'
+import { getGameBySlug } from '../services/gameService'
 
 export default function GameDetailPage() {
   const { slug } = useParams()
-  const { getGameBySlug } = useGame()
-  const game = getGameBySlug(slug)
+  const [game, setGame] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [isNotFound, setIsNotFound] = useState(false)
+  const [error, setError] = useState(null)
+  const [retryTrigger, setRetryTrigger] = useState(0)
 
-  // Global Library & Wishlist Context
+  // Global Library & Wishlist Context (localStorage based)
   const { isInLibrary, toggleLibrary, isInWishlist, toggleWishlist } = useLibrary()
 
   // Scroll to top whenever slug changes
@@ -33,8 +38,62 @@ export default function GameDetailPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [slug])
 
-  // 1. Game Not Found State
-  if (!game) {
+  useEffect(() => {
+    if (!slug) return
+
+    let isMounted = true
+
+    getGameBySlug(slug)
+      .then((data) => {
+        if (isMounted) {
+          setGame(data)
+          setIsNotFound(false)
+          setError(null)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return
+        console.error('Failed to load game detail for slug:', slug, err)
+        if (err.response && err.response.status === 404) {
+          setIsNotFound(true)
+        } else {
+          setError('Tidak dapat memuat detail game dari server. Silakan coba kembali.')
+        }
+        setLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [slug, retryTrigger])
+
+  const handleRetry = () => {
+    setLoading(true)
+    setError(null)
+    setIsNotFound(false)
+    setRetryTrigger((prev) => prev + 1)
+  }
+
+  // 1. Loading Skeleton State
+  if (loading) {
+    return (
+      <div className="space-y-12 py-2">
+        <div className="h-4 w-48 rounded bg-slate-800 animate-pulse" />
+        <HeroSkeleton />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-pulse">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="h-40 rounded-2xl bg-[#111726]/80 border border-slate-800" />
+            <div className="h-60 rounded-2xl bg-[#111726]/80 border border-slate-800" />
+          </div>
+          <div className="h-80 rounded-2xl bg-[#111726]/80 border border-slate-800" />
+        </div>
+      </div>
+    )
+  }
+
+  // 2. 404 Game Not Found State
+  if (isNotFound || (!game && !error)) {
     return (
       <div className="py-20 text-center rounded-3xl bg-[#111726]/50 border border-slate-800 p-8 sm:p-12 space-y-5 my-8">
         <div className="inline-flex p-4 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-lg">
@@ -43,7 +102,7 @@ export default function GameDetailPage() {
         <div className="space-y-2 max-w-md mx-auto">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Game Not Found</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
-            Game dengan slug &ldquo;<span className="text-indigo-400 font-mono">{slug}</span>&rdquo; tidak ditemukan di katalog GameVault.
+            Game dengan slug &ldquo;<span className="text-indigo-400 font-mono">{slug}</span>&rdquo; tidak ditemukan di katalog publik GameVault.
           </p>
         </div>
         <div className="pt-2">
@@ -55,6 +114,19 @@ export default function GameDetailPage() {
             <span>Browse Games</span>
           </Link>
         </div>
+      </div>
+    )
+  }
+
+  // 3. Network / Server Error State
+  if (error) {
+    return (
+      <div className="py-8">
+        <ErrorState
+          title="Gagal Memuat Detail Game"
+          message={error}
+          onRetry={handleRetry}
+        />
       </div>
     )
   }
@@ -85,7 +157,7 @@ export default function GameDetailPage() {
         {game.genre && (
           <>
             <Link
-              to={`/browse?genre=${game.genre}`}
+              to={`/browse?genre=${game.genre.toLowerCase()}`}
               className="hover:text-indigo-400 transition-colors"
             >
               {game.genre}
@@ -245,7 +317,7 @@ export default function GameDetailPage() {
               <h2 className="text-xl font-bold text-white">About This Game</h2>
             </div>
             <div className="p-6 sm:p-8 rounded-2xl bg-[#111726]/80 border border-slate-800 space-y-4">
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed font-normal whitespace-pre-line">
                 {game.description}
               </p>
               {game.genres && game.genres.length > 0 && (
@@ -267,7 +339,7 @@ export default function GameDetailPage() {
           {/* Screenshot Gallery with Modal Lightbox */}
           <section>
             <ScreenshotGallery
-              screenshots={game.screenshots || [game.banner, game.image]}
+              screenshots={game.screenshots || [game.banner, game.image].filter(Boolean)}
               gameTitle={game.title}
             />
           </section>
@@ -288,7 +360,7 @@ export default function GameDetailPage() {
       <DownloadSection game={game} />
 
       {/* 5. Similar Games Section */}
-      <SimilarGames currentSlug={game.slug} genre={game.genre} />
+      <SimilarGames currentSlug={game.slug} />
     </div>
   )
 }

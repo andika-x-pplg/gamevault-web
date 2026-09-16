@@ -1,42 +1,87 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Flame, Download, Compass, Sparkles } from 'lucide-react'
 import HeroSection from '../components/HeroSection'
 import SectionHeader from '../components/SectionHeader'
 import GameCard from '../components/GameCard'
 import GenreCard from '../components/GenreCard'
 import CTASection from '../components/CTASection'
-import { useGame } from '../context/useGame'
-import { genres } from '../data/genres'
+import HeroSkeleton from '../components/HeroSkeleton'
+import GameCardSkeleton from '../components/GameCardSkeleton'
+import ErrorState from '../components/ErrorState'
+import { getGames, getCategories } from '../services/gameService'
 
 export default function HomePage() {
-  const { publishedGames } = useGame()
+  const [featuredGames, setFeaturedGames] = useState([])
+  const [trendingGames, setTrendingGames] = useState([])
+  const [popularGames, setPopularGames] = useState([])
+  const [newReleases, setNewReleases] = useState([])
+  const [categories, setCategories] = useState([])
 
-  const featuredGames = useMemo(() => {
-    const list = publishedGames.filter((g) => g.featured)
-    return list.length > 0 ? list : publishedGames.slice(0, 3)
-  }, [publishedGames])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [retryTrigger, setRetryTrigger] = useState(0)
 
-  const trendingGames = useMemo(() => {
-    const list = publishedGames.filter((g) => g.trending)
-    return (list.length > 0 ? list : publishedGames).slice(0, 4)
-  }, [publishedGames])
+  useEffect(() => {
+    let isMounted = true
 
-  const popularGames = useMemo(() => {
-    return [...publishedGames]
-      .sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0))
-      .slice(0, 4)
-  }, [publishedGames])
+    Promise.all([
+      getGames({ featured: true, per_page: 5 }),
+      getGames({ sort: 'popular', per_page: 4 }),
+      getGames({ sort: 'downloads', per_page: 4 }),
+      getGames({ sort: 'newest', per_page: 4 }),
+      getCategories(),
+    ])
+      .then(([featuredRes, trendingRes, popularRes, newReleasesRes, categoriesRes]) => {
+        if (!isMounted) return
+        const featuredList =
+          featuredRes.games.length > 0 ? featuredRes.games : trendingRes.games.slice(0, 3)
 
-  const newReleases = useMemo(() => {
-    return [...publishedGames]
-      .sort((a, b) => (b.id || 0) - (a.id || 0))
-      .slice(0, 4)
-  }, [publishedGames])
+        setFeaturedGames(featuredList)
+        setTrendingGames(trendingRes.games)
+        setPopularGames(popularRes.games)
+        setNewReleases(newReleasesRes.games)
+        setCategories(categoriesRes)
+        setError(null)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (!isMounted) return
+        console.error('Failed to load home page data from API:', err)
+        setError('Tidak dapat memuat data game dari server. Silakan periksa koneksi backend Anda.')
+        setLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [retryTrigger])
+
+  const handleRetry = () => {
+    setLoading(true)
+    setError(null)
+    setRetryTrigger((prev) => prev + 1)
+  }
+
+  if (error) {
+    return (
+      <div className="py-8">
+        <ErrorState
+          title="Gagal Memuat Katalog Home"
+          message={error}
+          onRetry={handleRetry}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-16 py-4">
       {/* 1. Hero Section / Featured Games Carousel */}
-      <HeroSection featuredGames={featuredGames} />
+      {loading ? (
+        <HeroSkeleton />
+      ) : (
+        <HeroSection featuredGames={featuredGames} />
+      )}
 
       {/* 2. Trending Games Section */}
       <section>
@@ -45,13 +90,15 @@ export default function HomePage() {
           badgeText="Hot & Popular"
           title="Trending Games"
           subtitle="Game legal dan gratis yang paling banyak dimainkan minggu ini oleh komunitas."
-          viewAllLink="/browse?filter=trending"
+          viewAllLink="/browse?sort=popular"
           viewAllText="Lihat Semua Trending"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {trendingGames.map((game) => (
-            <GameCard key={game.id} game={game} variant="standard" />
-          ))}
+          {loading
+            ? Array.from({ length: 4 }).map((_, idx) => <GameCardSkeleton key={idx} />)
+            : trendingGames.map((game) => (
+                <GameCard key={game.id} game={game} variant="standard" />
+              ))}
         </div>
       </section>
 
@@ -66,9 +113,11 @@ export default function HomePage() {
           viewAllText="Lihat Terpopuler"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {popularGames.map((game) => (
-            <GameCard key={game.id} game={game} variant="popular" />
-          ))}
+          {loading
+            ? Array.from({ length: 4 }).map((_, idx) => <GameCardSkeleton key={idx} />)
+            : popularGames.map((game) => (
+                <GameCard key={game.id} game={game} variant="popular" />
+              ))}
         </div>
       </section>
 
@@ -83,9 +132,16 @@ export default function HomePage() {
           viewAllText="Lihat Semua Kategori"
         />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {genres.map((genre) => (
-            <GenreCard key={genre.id} genre={genre} />
-          ))}
+          {loading
+            ? Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-36 rounded-2xl bg-slate-900/60 border border-slate-800 animate-pulse p-4"
+                />
+              ))
+            : categories.map((cat) => (
+                <GenreCard key={cat.id} genre={cat} />
+              ))}
         </div>
       </section>
 
@@ -100,9 +156,11 @@ export default function HomePage() {
           viewAllText="Lihat Game Terbaru"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {newReleases.map((game) => (
-            <GameCard key={game.id} game={game} variant="compact" />
-          ))}
+          {loading
+            ? Array.from({ length: 4 }).map((_, idx) => <GameCardSkeleton key={idx} />)
+            : newReleases.map((game) => (
+                <GameCard key={game.id} game={game} variant="compact" />
+              ))}
         </div>
       </section>
 

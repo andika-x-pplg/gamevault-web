@@ -1,32 +1,39 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Gamepad2 } from 'lucide-react'
-import { useGame } from '../context/useGame'
 import GameCard from './GameCard'
+import GameCardSkeleton from './GameCardSkeleton'
+import { getSimilarGames } from '../services/gameService'
 
-export default function SimilarGames({ currentSlug, genre }) {
-  const { publishedGames } = useGame()
+export default function SimilarGames({ currentSlug }) {
+  const [similar, setSimilar] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const similar = useMemo(() => {
-    const matched = publishedGames.filter(
-      (g) =>
-        g.slug !== currentSlug &&
-        (g.genre?.toLowerCase() === genre?.toLowerCase() ||
-          (Array.isArray(g.genres) &&
-            g.genres.some((item) => item?.toLowerCase() === genre?.toLowerCase())))
-    )
+  useEffect(() => {
+    if (!currentSlug) return
 
-    if (matched.length >= 4) {
-      return matched.slice(0, 4)
+    let isMounted = true
+
+    getSimilarGames(currentSlug)
+      .then((games) => {
+        if (isMounted) {
+          setSimilar(games)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load similar games:', err)
+        if (isMounted) {
+          setSimilar([])
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
     }
+  }, [currentSlug])
 
-    const others = publishedGames.filter(
-      (g) => g.slug !== currentSlug && !matched.some((m) => m.id === g.id)
-    )
-
-    return [...matched, ...others].slice(0, 4)
-  }, [publishedGames, currentSlug, genre])
-
-  if (!similar || similar.length === 0) return null
+  if (!loading && (!similar || similar.length === 0)) return null
 
   return (
     <section className="space-y-4 pt-6 border-t border-slate-800/80">
@@ -43,9 +50,11 @@ export default function SimilarGames({ currentSlug, genre }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {similar.map((game) => (
-          <GameCard key={game.id} game={game} variant="standard" />
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, idx) => <GameCardSkeleton key={idx} />)
+          : similar.map((game) => (
+              <GameCard key={game.id} game={game} variant="standard" />
+            ))}
       </div>
     </section>
   )
