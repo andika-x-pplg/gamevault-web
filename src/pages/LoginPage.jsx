@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, Sparkles } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, Sparkles, Shield, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
-import { DEMO_USER } from '../data/authDemo'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -29,9 +28,7 @@ export default function LoginPage() {
     }
 
     if (!password) {
-      errs.password = 'Password wajib diisi.'
-    } else if (password.length < 6) {
-      errs.password = 'Password minimal 6 karakter.'
+      errs.password = 'Kata sandi wajib diisi.'
     }
 
     setErrors(errs)
@@ -42,23 +39,42 @@ export default function LoginPage() {
     e.preventDefault()
     setAuthError('')
 
-    if (!validate()) return
+    if (!validate() || isSubmitting) return
 
     setIsSubmitting(true)
     const result = await login(email, password, rememberMe)
     setIsSubmitting(false)
 
     if (result.success) {
-      const destination = location.state?.from?.pathname || '/library'
-      navigate(destination, { replace: true })
+      // Role-based smart redirect
+      if (result.user?.role === 'admin') {
+        navigate('/admin', { replace: true })
+      } else {
+        const destination = location.state?.from?.pathname || '/library'
+        navigate(destination, { replace: true })
+      }
     } else {
-      setAuthError(result.message || 'Gagal masuk. Periksa email dan password Anda.')
+      if (result.errors && typeof result.errors === 'object') {
+        const fieldErrors = {}
+        Object.entries(result.errors).forEach(([field, msgArr]) => {
+          fieldErrors[field] = Array.isArray(msgArr) ? msgArr[0] : msgArr
+        })
+        setErrors(fieldErrors)
+      }
+      setAuthError(result.message || 'Gagal masuk. Periksa email dan kata sandi Anda.')
     }
   }
 
   const fillDemoAccount = () => {
-    setEmail(DEMO_USER.email)
+    setEmail('demo@gamevault.dev')
     setPassword('GameVault123!')
+    setErrors({})
+    setAuthError('')
+  }
+
+  const fillAdminAccount = () => {
+    setEmail('admin@gamevault.dev')
+    setPassword('GameVaultAdmin123!')
     setErrors({})
     setAuthError('')
   }
@@ -75,24 +91,34 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Demo Account Helper Shortcut */}
-      <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-between gap-3 text-xs">
+      {/* Demo Account Helper Shortcut Toolbar */}
+      <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 space-y-2 text-xs">
         <div className="flex items-center gap-2 text-indigo-300">
           <Sparkles className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-          <span>Akun Demo Evaluator Tersedia</span>
+          <span className="font-semibold">Akun Development Tersedia:</span>
         </div>
-        <button
-          type="button"
-          onClick={fillDemoAccount}
-          className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors cursor-pointer"
-        >
-          Isi Cepat
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={fillDemoAccount}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white font-medium transition-colors cursor-pointer"
+          >
+            <span>Demo Player</span>
+          </button>
+          <button
+            type="button"
+            onClick={fillAdminAccount}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white font-medium transition-colors cursor-pointer"
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Admin</span>
+          </button>
+        </div>
       </div>
 
-      {/* Server/Mock Auth Error Alert */}
+      {/* Server Auth Error Alert */}
       {authError && (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-300">
+        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-300 animate-fade-in">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
           <span>{authError}</span>
         </div>
@@ -200,7 +226,10 @@ export default function LoginPage() {
             className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/25 hover:shadow-indigo-500/40 hover:scale-101 active:scale-99 transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
-              <span>Memproses...</span>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span>Memproses...</span>
+              </>
             ) : (
               <>
                 <LogIn className="w-4 h-4" />

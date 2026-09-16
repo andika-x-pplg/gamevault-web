@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Mail, Send, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Mail, Send, ArrowLeft, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
     }
 
     setIsSubmitting(true)
-    // Simulate network delay
+    // Simulate brief processing
     await new Promise((resolve) => setTimeout(resolve, 400))
     setIsSubmitting(false)
     setIsSent(true)
@@ -41,6 +41,14 @@ export default function ForgotPasswordPage() {
         </p>
       </div>
 
+      {/* Notice info */}
+      <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-2.5 text-xs text-indigo-300">
+        <Info className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+        <span>
+          Layanan reset password otomatis via email sedang dalam tahap persiapan infrastruktur server surat (mail server).
+        </span>
+      </div>
+
       {isSent ? (
         /* Success State */
         <div className="p-6 rounded-2xl bg-[#111726] border border-emerald-500/30 text-center space-y-4 animate-fade-in">
@@ -48,9 +56,9 @@ export default function ForgotPasswordPage() {
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-white">Instruksi Telah Terkirim</h3>
+            <h3 className="text-base font-bold text-white">Permintaan Terkirim</h3>
             <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
-              Tautan pemulihan kata sandi telah dikirim ke <strong className="text-indigo-400">{email}</strong>. Silakan periksa kotak masuk atau folder spam Anda.
+              Permintaan pemulihan untuk <strong className="text-indigo-400">{email}</strong> telah dicatat.
             </p>
           </div>
           <div className="pt-2">

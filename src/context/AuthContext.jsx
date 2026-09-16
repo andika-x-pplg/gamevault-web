@@ -1,122 +1,155 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AuthContext } from './authContextInstance'
-import { DEMO_USER, ADMIN_USER } from '../data/authDemo'
+import * as authService from '../services/authService'
 
-const AUTH_STORAGE_KEY = 'gamevault_auth'
+const LEGACY_AUTH_STORAGE_KEY = 'gamevault_auth'
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
+  const [user, setUser] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Clean up legacy mock auth storage key once on mount
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem(AUTH_STORAGE_KEY)
-      return saved ? JSON.parse(saved) : null
+      localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY)
+      sessionStorage.removeItem('gamevault_temp_auth')
     } catch {
-      return null
+      // Ignore storage errors
     }
-  })
+  }, [])
+
+  // Check persistent Sanctum session from backend on application mount
+  useEffect(() => {
+    let isMounted = true
+
+    authService
+      .getCurrentUser()
+      .then((res) => {
+        if (isMounted && res?.data) {
+          setUser(res.data)
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setUser(null)
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const isAuthenticated = !!user
   const isAdmin = user?.role === 'admin'
 
-  // Synchronize non-sensitive user profile to localStorage if session exists
-  useEffect(() => {
+  /**
+   * Real Laravel Sanctum Login
+   */
+  const login = useCallback(async (email, password, rememberMe = true) => {
     try {
-      if (user) {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user))
-      } else {
-        localStorage.removeItem(AUTH_STORAGE_KEY)
+      const res = await authService.login({
+        email: email.trim(),
+        password,
+        remember: rememberMe,
+      })
+
+      if (res?.data) {
+        setUser(res.data)
+        return { success: true, user: res.data }
+      }
+
+      return {
+        success: false,
+        message: 'Gagal masuk. Respons tidak valid dari server.',
+      }
+    } catch (err) {
+      console.error('Login error:', err)
+      const message =
+        err.response?.data?.message ||
+        'Email atau kata sandi yang Anda masukkan salah. Silakan coba kembali.'
+      const errors = err.response?.data?.errors || {}
+
+      return {
+        success: false,
+        message,
+        errors,
+      }
+    }
+  }, [])
+
+  /**
+   * Real Laravel Sanctum Registration
+   */
+  const register = useCallback(
+    async ({ username, email, password, password_confirmation }) => {
+      try {
+        const res = await authService.register({
+          name: username.trim(),
+          email: email.trim(),
+          password,
+          password_confirmation,
+        })
+
+        if (res?.data) {
+          setUser(res.data)
+          return { success: true, user: res.data }
+        }
+
+        return {
+          success: false,
+          message: 'Pendaftaran gagal. Respons tidak valid dari server.',
+        }
+      } catch (err) {
+        console.error('Registration error:', err)
+        const message =
+          err.response?.data?.message ||
+          'Gagal mendaftarkan akun. Silakan periksa formulir input Anda.'
+        const errors = err.response?.data?.errors || {}
+
+        return {
+          success: false,
+          message,
+          errors,
+        }
+      }
+    },
+    []
+  )
+
+  /**
+   * Real Laravel Sanctum Logout
+   */
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout()
+    } catch (err) {
+      console.error('Logout error on backend:', err)
+    } finally {
+      setUser(null)
+    }
+  }, [])
+
+  /**
+   * Refresh current user profile from server
+   */
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await authService.getCurrentUser()
+      if (res?.data) {
+        setUser(res.data)
+        return res.data
       }
     } catch {
-      // Ignore storage write errors in private browsing
+      setUser(null)
     }
-  }, [user])
-
-  /**
-   * Mock login function
-   * In production, this will be replaced with an axios/fetch call to Laravel Sanctum / JWT API
-   */
-  const login = async (email, password, rememberMe = true) => {
-    // Simulate brief network latency
-    await new Promise((resolve) => setTimeout(resolve, 300))
-
-    const cleanEmail = email.trim().toLowerCase()
-
-    // Check admin credentials
-    if (cleanEmail === ADMIN_USER.email.toLowerCase() && password === 'GameVaultAdmin123!') {
-      const authUser = { ...ADMIN_USER }
-      setUser(authUser)
-      if (!rememberMe) {
-        sessionStorage.setItem('gamevault_temp_auth', 'true')
-      }
-      return { success: true, user: authUser }
-    }
-
-    // Check demo credentials
-    if (cleanEmail === DEMO_USER.email.toLowerCase() && password === 'GameVault123!') {
-      const authUser = { ...DEMO_USER }
-      setUser(authUser)
-      if (!rememberMe) {
-        sessionStorage.setItem('gamevault_temp_auth', 'true')
-      }
-      return { success: true, user: authUser }
-    }
-
-    // Allow mock login for any valid email if password length >= 6 for testing convenience
-    if (cleanEmail.includes('@') && password.length >= 6) {
-      const customUsername = cleanEmail.split('@')[0]
-      const customUser = {
-        id: `usr-${Date.now()}`,
-        username: customUsername.charAt(0).toUpperCase() + customUsername.slice(1),
-        email: cleanEmail,
-        role: 'user',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-        joinedDate: new Date().toISOString().split('T')[0],
-      }
-      setUser(customUser)
-      return { success: true, user: customUser }
-    }
-
-    return {
-      success: false,
-      message: 'Email atau password salah. Cek demo@gamevault.dev (user) atau admin@gamevault.dev (admin).',
-    }
-  }
-
-  /**
-   * Mock register function
-   * In production, this will be replaced with Laravel registration endpoint
-   */
-  const register = async ({ username, email, password }) => {
-    await new Promise((resolve) => setTimeout(resolve, 300))
-
-    if (!username || !email || !password) {
-      return { success: false, message: 'Semua field wajib diisi.' }
-    }
-
-    const newUser = {
-      id: `usr-${Date.now()}`,
-      username: username.trim(),
-      email: email.trim().toLowerCase(),
-      role: 'user',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-      joinedDate: new Date().toISOString().split('T')[0],
-    }
-
-    setUser(newUser)
-    return { success: true, user: newUser }
-  }
-
-  /**
-   * Logout function
-   */
-  const logout = () => {
-    setUser(null)
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY)
-      sessionStorage.removeItem('gamevault_temp_auth')
-    } catch {
-      // Ignore errors
-    }
-  }
+    return null
+  }, [])
 
   return (
     <AuthContext.Provider
@@ -124,9 +157,11 @@ export function AuthProvider({ children }) {
         user,
         isAuthenticated,
         isAdmin,
+        isLoading,
         login,
         register,
         logout,
+        refreshUser,
       }}
     >
       {children}

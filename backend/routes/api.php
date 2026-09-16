@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\GameController;
 use Illuminate\Support\Facades\Route;
@@ -8,11 +9,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider / Application routing
-| within a group which is assigned the "api" middleware group.
-|
 */
 
 // System Health Check Endpoint
@@ -23,6 +19,21 @@ Route::get('/health', function () {
         'timestamp' => now()->toIso8601String(),
         'version' => '1.0.0',
     ], 200);
+});
+
+// Authentication Routes (Public)
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// Authenticated Routes (Sanctum SPA Session)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user', [AuthController::class, 'user']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Admin-only verification route
+    Route::middleware('admin')->group(function () {
+        Route::get('/admin/verify', [AuthController::class, 'verifyAdmin']);
+    });
 });
 
 // Public Games Endpoints

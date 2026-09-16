@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { User, Mail, Lock, Eye, EyeOff, UserPlus, AlertCircle } from 'lucide-react'
+import { User, Mail, Lock, Eye, EyeOff, UserPlus, AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 
 export default function RegisterPage() {
@@ -81,15 +81,28 @@ export default function RegisterPage() {
     e.preventDefault()
     setServerError('')
 
-    if (!validate()) return
+    if (!validate() || isSubmitting) return
 
     setIsSubmitting(true)
-    const result = await register({ username, email, password })
+    const result = await register({
+      username,
+      email,
+      password,
+      password_confirmation: confirmPassword,
+    })
     setIsSubmitting(false)
 
     if (result.success) {
       navigate('/library', { replace: true })
     } else {
+      if (result.errors && typeof result.errors === 'object') {
+        const fieldErrors = {}
+        Object.entries(result.errors).forEach(([field, msgArr]) => {
+          const key = field === 'name' ? 'username' : field
+          fieldErrors[key] = Array.isArray(msgArr) ? msgArr[0] : msgArr
+        })
+        setErrors(fieldErrors)
+      }
       setServerError(result.message || 'Gagal mendaftar akun.')
     }
   }
@@ -108,7 +121,7 @@ export default function RegisterPage() {
 
       {/* Error Banner */}
       {serverError && (
-        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-300">
+        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2.5 text-xs text-red-300 animate-fade-in">
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
           <span>{serverError}</span>
         </div>
@@ -119,14 +132,14 @@ export default function RegisterPage() {
         {/* Username Field */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-300" htmlFor="reg-username">
-            Username
+            Username / Nama Lengkap
           </label>
           <div className="relative">
             <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               id="reg-username"
               type="text"
-              placeholder="Contoh: GamerX"
+              placeholder="Contoh: GamerPro99"
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value)
@@ -308,7 +321,10 @@ export default function RegisterPage() {
             className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/25 hover:shadow-indigo-500/40 hover:scale-101 active:scale-99 transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
-              <span>Mendaftarkan...</span>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                <span>Mendaftarkan...</span>
+              </>
             ) : (
               <>
                 <UserPlus className="w-4 h-4" />
