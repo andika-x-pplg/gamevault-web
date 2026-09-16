@@ -1,10 +1,30 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
-import { Gamepad2, Search, Heart, User, Compass, Home, LayoutGrid, Menu, X } from 'lucide-react'
+import {
+  Gamepad2,
+  Search,
+  Heart,
+  User,
+  Compass,
+  Home,
+  LayoutGrid,
+  Menu,
+  X,
+  LogOut,
+  ChevronDown,
+} from 'lucide-react'
+import { useAuth } from '../context/useAuth'
+import { useLibrary } from '../context/useLibrary'
 
 export default function Navbar() {
+  const { user, isAuthenticated, logout } = useAuth()
+  const { wishlist } = useLibrary()
+
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+
+  const dropdownRef = useRef(null)
   const navigate = useNavigate()
 
   const handleSearch = (e) => {
@@ -14,6 +34,35 @@ export default function Navbar() {
       setMobileMenuOpen(false)
     }
   }
+
+  const handleLogout = () => {
+    setUserDropdownOpen(false)
+    setMobileMenuOpen(false)
+    logout()
+    navigate('/')
+  }
+
+  // Close dropdown on click outside or Escape key
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setUserDropdownOpen(false)
+      }
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setUserDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const navLinkClass = ({ isActive }) =>
     `relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
@@ -69,29 +118,101 @@ export default function Navbar() {
             </form>
           </div>
 
-          {/* Right Action Icons & Login */}
+          {/* Right Action Icons & Auth */}
           <div className="flex items-center gap-2.5 flex-shrink-0">
-            {/* Wishlist Button */}
-            <button
-              type="button"
+            {/* Wishlist Link Button */}
+            <Link
+              to="/wishlist"
               className="relative p-2 rounded-xl text-slate-300 hover:text-white bg-[#111726]/60 hover:bg-slate-800 border border-slate-800 transition-all hover:border-slate-700"
               title="Wishlist"
               aria-label="Wishlist"
             >
               <Heart className="w-4 h-4 text-rose-400 hover:fill-rose-400 transition-colors" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-[10px] font-bold text-white rounded-full flex items-center justify-center">
-                3
-              </span>
-            </button>
+              {wishlist.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-rose-600 text-[10px] font-bold text-white rounded-full flex items-center justify-center px-1">
+                  {wishlist.length}
+                </span>
+              )}
+            </Link>
 
-            {/* Login Button */}
-            <button
-              type="button"
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 border border-indigo-500/40 shadow-sm shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all"
-            >
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline">Sign In</span>
-            </button>
+            {/* User Dropdown or Sign In Button */}
+            {isAuthenticated ? (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-[#161F33] hover:bg-[#1E2942] border border-slate-700/80 hover:border-indigo-500/50 transition-all cursor-pointer shadow-sm"
+                  aria-expanded={userDropdownOpen}
+                  aria-haspopup="true"
+                >
+                  <img
+                    src={user.avatar}
+                    alt={user.username}
+                    className="w-7 h-7 rounded-lg object-cover border border-indigo-500/30"
+                  />
+                  <span className="hidden sm:inline text-xs font-semibold text-slate-200 max-w-[100px] truncate">
+                    {user.username}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                      userDropdownOpen ? 'rotate-180 text-indigo-400' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Dropdown Menu */}
+                {userDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#111726] border border-slate-700 shadow-2xl py-2 z-50 animate-fade-in divide-y divide-slate-800/80">
+                    <div className="px-4 py-2.5">
+                      <p className="text-xs font-bold text-white truncate">{user.username}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                    </div>
+
+                    <div className="py-1">
+                      <Link
+                        to="/library"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+                      >
+                        <Gamepad2 className="w-4 h-4 text-indigo-400" />
+                        <span>My Library</span>
+                      </Link>
+                      <Link
+                        to="/wishlist"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+                      >
+                        <Heart className="w-4 h-4 text-rose-400" />
+                        <span>Wishlist ({wishlist.length})</span>
+                      </Link>
+                      <div className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-500 cursor-not-allowed select-none">
+                        <User className="w-4 h-4 text-slate-600" />
+                        <span>Profile (Segera Hadir)</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 border border-indigo-500/40 shadow-sm shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all"
+              >
+                <User className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign In</span>
+              </Link>
+            )}
 
             {/* Mobile Menu Toggle */}
             <button
@@ -144,6 +265,27 @@ export default function Navbar() {
                 <LayoutGrid className="w-4 h-4 text-indigo-400" />
                 <span>Categories</span>
               </NavLink>
+
+              {isAuthenticated && (
+                <>
+                  <NavLink
+                    to="/library"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={navLinkClass}
+                  >
+                    <Gamepad2 className="w-4 h-4 text-indigo-400" />
+                    <span>My Library</span>
+                  </NavLink>
+                  <NavLink
+                    to="/wishlist"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={navLinkClass}
+                  >
+                    <Heart className="w-4 h-4 text-rose-400" />
+                    <span>Wishlist ({wishlist.length})</span>
+                  </NavLink>
+                </>
+              )}
             </div>
           </div>
         )}

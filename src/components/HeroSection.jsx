@@ -11,10 +11,11 @@ import {
   Gamepad2,
   ShieldCheck,
 } from 'lucide-react'
+import { useLibrary } from '../context/useLibrary'
 
 export default function HeroSection({ featuredGames = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [librarySaved, setLibrarySaved] = useState({})
+  const { isInLibrary, toggleLibrary } = useLibrary()
 
   // Auto cycle carousel every 7 seconds
   useEffect(() => {
@@ -38,14 +39,7 @@ export default function HeroSection({ featuredGames = [] }) {
     setCurrentIndex((prev) => (prev + 1) % featuredGames.length)
   }
 
-  const toggleLibrary = (gameId) => {
-    setLibrarySaved((prev) => ({
-      ...prev,
-      [gameId]: !prev[gameId],
-    }))
-  }
-
-  const isSaved = !!librarySaved[currentGame.id]
+  const isSaved = isInLibrary(currentGame.slug)
 
   return (
     <section className="relative rounded-3xl overflow-hidden border border-slate-800 bg-[#0E1524] shadow-2xl">
@@ -120,7 +114,7 @@ export default function HeroSection({ featuredGames = [] }) {
 
               <button
                 type="button"
-                onClick={() => toggleLibrary(currentGame.id)}
+                onClick={() => toggleLibrary(currentGame.slug)}
                 className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
                   isSaved
                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'

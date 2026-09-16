@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   Star,
@@ -13,6 +13,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { getGameBySlug } from '../data/games'
+import { useLibrary } from '../context/useLibrary'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 import GameInformation from '../components/GameInformation'
 import SystemRequirements from '../components/SystemRequirements'
@@ -23,9 +24,8 @@ export default function GameDetailPage() {
   const { slug } = useParams()
   const game = getGameBySlug(slug)
 
-  // Local state keyed by game slug
-  const [libraryMap, setLibraryMap] = useState({})
-  const [wishlistMap, setWishlistMap] = useState({})
+  // Global Library & Wishlist Context
+  const { isInLibrary, toggleLibrary, isInWishlist, toggleWishlist } = useLibrary()
 
   // Scroll to top whenever slug changes
   useEffect(() => {
@@ -58,22 +58,8 @@ export default function GameDetailPage() {
     )
   }
 
-  const isInLibrary = !!libraryMap[game.slug]
-  const isWishlisted = !!wishlistMap[game.slug]
-
-  const toggleLibrary = () => {
-    setLibraryMap((prev) => ({
-      ...prev,
-      [game.slug]: !prev[game.slug],
-    }))
-  }
-
-  const toggleWishlist = () => {
-    setWishlistMap((prev) => ({
-      ...prev,
-      [game.slug]: !prev[game.slug],
-    }))
-  }
+  const inLibrary = isInLibrary(game.slug)
+  const isWishlisted = isInWishlist(game.slug)
 
   // Handle smooth scroll to download section
   const scrollToDownload = () => {
@@ -200,14 +186,14 @@ export default function GameDetailPage() {
                 {/* Add to Library Toggle */}
                 <button
                   type="button"
-                  onClick={toggleLibrary}
+                  onClick={() => toggleLibrary(game.slug)}
                   className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
-                    isInLibrary
+                    inLibrary
                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                       : 'bg-slate-900/80 hover:bg-slate-800 border-slate-700 text-white'
                   }`}
                 >
-                  {isInLibrary ? (
+                  {inLibrary ? (
                     <>
                       <Check className="w-4 h-4 text-emerald-400" />
                       <span>In Library</span>
@@ -223,7 +209,7 @@ export default function GameDetailPage() {
                 {/* Wishlist Toggle */}
                 <button
                   type="button"
-                  onClick={toggleWishlist}
+                  onClick={() => toggleWishlist(game.slug)}
                   className={`inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
                     isWishlisted
                       ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
