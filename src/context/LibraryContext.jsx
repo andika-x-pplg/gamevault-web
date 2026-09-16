@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LibraryContext } from './libraryContextInstance'
-import { games } from '../data/games'
+import { useGame } from './useGame'
 
 const LIBRARY_STORAGE_KEY = 'gamevault_library'
 const WISHLIST_STORAGE_KEY = 'gamevault_wishlist'
@@ -10,6 +10,8 @@ const DEFAULT_LIBRARY_SLUGS = ['shattered-pixel-dungeon', 'trackmania-nations-fo
 const DEFAULT_WISHLIST_SLUGS = ['beyond-all-reason', 'open-ra', 'veloren']
 
 export function LibraryProvider({ children }) {
+  const { games } = useGame()
+
   // Library State (Array of game slugs)
   const [library, setLibrary] = useState(() => {
     try {
@@ -88,9 +90,18 @@ export function LibraryProvider({ children }) {
     }
   }
 
-  // Full Game Objects for Library & Wishlist Pages
-  const libraryGames = games.filter((g) => library.includes(g.slug))
-  const wishlistGames = games.filter((g) => wishlist.includes(g.slug))
+  // Full Game Objects for Library & Wishlist Pages (safe against deleted games)
+  const libraryGames = useMemo(() => {
+    return library
+      .map((slug) => games.find((g) => g.slug === slug))
+      .filter(Boolean)
+  }, [library, games])
+
+  const wishlistGames = useMemo(() => {
+    return wishlist
+      .map((slug) => games.find((g) => g.slug === slug))
+      .filter(Boolean)
+  }, [wishlist, games])
 
   return (
     <LibraryContext.Provider

@@ -12,7 +12,7 @@ import {
   ChevronDown,
   Sparkles,
 } from 'lucide-react'
-import { games } from '../data/games'
+import { useGame } from '../context/useGame'
 import GameCard from '../components/GameCard'
 
 const GENRES = [
@@ -57,6 +57,7 @@ const INITIAL_PAGE_SIZE = 8
 const LOAD_MORE_STEP = 8
 
 export default function BrowsePage() {
+  const { publishedGames: games } = useGame()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Read state directly from URL Query Parameters (Single Source of Truth)
@@ -186,7 +187,7 @@ export default function BrowsePage() {
     })
 
     return result
-  }, [searchQuery, selectedGenre, selectedYear, selectedType, sortBy])
+  }, [games, searchQuery, selectedGenre, selectedYear, selectedType, sortBy])
 
   // Games currently visible on page
   const visibleGames = filteredAndSortedGames.slice(0, visibleCount)

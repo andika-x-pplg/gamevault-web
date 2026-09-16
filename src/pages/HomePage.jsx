@@ -1,22 +1,37 @@
+import { useMemo } from 'react'
 import { Flame, Download, Compass, Sparkles } from 'lucide-react'
 import HeroSection from '../components/HeroSection'
 import SectionHeader from '../components/SectionHeader'
 import GameCard from '../components/GameCard'
 import GenreCard from '../components/GenreCard'
 import CTASection from '../components/CTASection'
-import {
-  getFeaturedGames,
-  getTrendingGames,
-  getPopularGames,
-  getNewReleases,
-} from '../data/games'
+import { useGame } from '../context/useGame'
 import { genres } from '../data/genres'
 
 export default function HomePage() {
-  const featuredGames = getFeaturedGames()
-  const trendingGames = getTrendingGames().slice(0, 4)
-  const popularGames = getPopularGames().slice(0, 4)
-  const newReleases = getNewReleases().slice(0, 4)
+  const { publishedGames } = useGame()
+
+  const featuredGames = useMemo(() => {
+    const list = publishedGames.filter((g) => g.featured)
+    return list.length > 0 ? list : publishedGames.slice(0, 3)
+  }, [publishedGames])
+
+  const trendingGames = useMemo(() => {
+    const list = publishedGames.filter((g) => g.trending)
+    return (list.length > 0 ? list : publishedGames).slice(0, 4)
+  }, [publishedGames])
+
+  const popularGames = useMemo(() => {
+    return [...publishedGames]
+      .sort((a, b) => (b.downloadCount || 0) - (a.downloadCount || 0))
+      .slice(0, 4)
+  }, [publishedGames])
+
+  const newReleases = useMemo(() => {
+    return [...publishedGames]
+      .sort((a, b) => (b.id || 0) - (a.id || 0))
+      .slice(0, 4)
+  }, [publishedGames])
 
   return (
     <div className="space-y-16 py-4">
@@ -61,13 +76,13 @@ export default function HomePage() {
       <section>
         <SectionHeader
           icon={Compass}
-          badgeText="Eksplorasi Kategori"
+          badgeText="Kategori Populer"
           title="Browse by Genre"
-          subtitle="Pilih game berdasarkan gaya bermain, mulai dari Action seru hingga simulasi mendalam."
+          subtitle="Eksplorasi game berdasarkan genre favoritmu dari berbagai developer legal."
           viewAllLink="/browse"
-          viewAllText="Semua Kategori"
+          viewAllText="Lihat Semua Kategori"
         />
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {genres.map((genre) => (
             <GenreCard key={genre.id} genre={genre} />
           ))}
@@ -78,20 +93,20 @@ export default function HomePage() {
       <section>
         <SectionHeader
           icon={Sparkles}
-          badgeText="Baru Ditambahkan"
+          badgeText="Fresh Drops"
           title="New Releases"
-          subtitle="Game legal dan versi update terbaru yang baru saja mendarat di GameVault."
+          subtitle="Game legal dan gratis terbaru yang baru saja ditambahkan ke platform GameVault."
           viewAllLink="/browse?sort=newest"
-          viewAllText="View All"
+          viewAllText="Lihat Game Terbaru"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {newReleases.map((game) => (
-            <GameCard key={game.id} game={game} variant="new" />
+            <GameCard key={game.id} game={game} variant="compact" />
           ))}
         </div>
       </section>
 
-      {/* 6. CTA Section */}
+      {/* 6. Call to Action (CTA) Section */}
       <CTASection />
     </div>
   )

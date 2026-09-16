@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AuthContext } from './authContextInstance'
-import { DEMO_USER } from '../data/authDemo'
+import { DEMO_USER, ADMIN_USER } from '../data/authDemo'
 
 const AUTH_STORAGE_KEY = 'gamevault_auth'
 
@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   })
 
   const isAuthenticated = !!user
+  const isAdmin = user?.role === 'admin'
 
   // Synchronize non-sensitive user profile to localStorage if session exists
   useEffect(() => {
@@ -39,6 +40,16 @@ export function AuthProvider({ children }) {
 
     const cleanEmail = email.trim().toLowerCase()
 
+    // Check admin credentials
+    if (cleanEmail === ADMIN_USER.email.toLowerCase() && password === 'GameVaultAdmin123!') {
+      const authUser = { ...ADMIN_USER }
+      setUser(authUser)
+      if (!rememberMe) {
+        sessionStorage.setItem('gamevault_temp_auth', 'true')
+      }
+      return { success: true, user: authUser }
+    }
+
     // Check demo credentials
     if (cleanEmail === DEMO_USER.email.toLowerCase() && password === 'GameVault123!') {
       const authUser = { ...DEMO_USER }
@@ -56,6 +67,7 @@ export function AuthProvider({ children }) {
         id: `usr-${Date.now()}`,
         username: customUsername.charAt(0).toUpperCase() + customUsername.slice(1),
         email: cleanEmail,
+        role: 'user',
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
         joinedDate: new Date().toISOString().split('T')[0],
       }
@@ -65,7 +77,7 @@ export function AuthProvider({ children }) {
 
     return {
       success: false,
-      message: 'Email atau password salah. Gunakan demo@gamevault.dev / GameVault123!',
+      message: 'Email atau password salah. Cek demo@gamevault.dev (user) atau admin@gamevault.dev (admin).',
     }
   }
 
@@ -84,6 +96,7 @@ export function AuthProvider({ children }) {
       id: `usr-${Date.now()}`,
       username: username.trim(),
       email: email.trim().toLowerCase(),
+      role: 'user',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
       joinedDate: new Date().toISOString().split('T')[0],
     }
@@ -110,6 +123,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         isAuthenticated,
+        isAdmin,
         login,
         register,
         logout,

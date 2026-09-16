@@ -12,7 +12,7 @@ import {
   Compass,
   FileText,
 } from 'lucide-react'
-import { getGameBySlug } from '../data/games'
+import { useGame } from '../context/useGame'
 import { useLibrary } from '../context/useLibrary'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 import GameInformation from '../components/GameInformation'
@@ -22,6 +22,7 @@ import SimilarGames from '../components/SimilarGames'
 
 export default function GameDetailPage() {
   const { slug } = useParams()
+  const { getGameBySlug } = useGame()
   const game = getGameBySlug(slug)
 
   // Global Library & Wishlist Context

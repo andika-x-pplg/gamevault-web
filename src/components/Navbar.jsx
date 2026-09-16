@@ -12,6 +12,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  Shield,
 } from 'lucide-react'
 import { useAuth } from '../context/useAuth'
 import { useLibrary } from '../context/useLibrary'
@@ -169,6 +170,16 @@ export default function Navbar() {
                     </div>
 
                     <div className="py-1">
+                      {user?.role === 'admin' && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 transition-colors"
+                        >
+                          <Shield className="w-4 h-4 text-primary-400" />
+                          <span>Admin Panel</span>
+                        </Link>
+                      )}
                       <Link
                         to="/library"
                         onClick={() => setUserDropdownOpen(false)}

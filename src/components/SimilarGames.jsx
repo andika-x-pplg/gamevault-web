@@ -1,9 +1,30 @@
+import { useMemo } from 'react'
 import { Gamepad2 } from 'lucide-react'
-import { getSimilarGames } from '../data/games'
+import { useGame } from '../context/useGame'
 import GameCard from './GameCard'
 
 export default function SimilarGames({ currentSlug, genre }) {
-  const similar = getSimilarGames(currentSlug, genre || 'Action', 4)
+  const { publishedGames } = useGame()
+
+  const similar = useMemo(() => {
+    const matched = publishedGames.filter(
+      (g) =>
+        g.slug !== currentSlug &&
+        (g.genre?.toLowerCase() === genre?.toLowerCase() ||
+          (Array.isArray(g.genres) &&
+            g.genres.some((item) => item?.toLowerCase() === genre?.toLowerCase())))
+    )
+
+    if (matched.length >= 4) {
+      return matched.slice(0, 4)
+    }
+
+    const others = publishedGames.filter(
+      (g) => g.slug !== currentSlug && !matched.some((m) => m.id === g.id)
+    )
+
+    return [...matched, ...others].slice(0, 4)
+  }, [publishedGames, currentSlug, genre])
 
   if (!similar || similar.length === 0) return null
 
