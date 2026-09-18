@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Sparkles,
   ChevronLeft,
@@ -10,12 +10,17 @@ import {
   Check,
   Gamepad2,
   ShieldCheck,
+  Loader2,
 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import { useLibrary } from '../context/useLibrary'
 
 export default function HeroSection({ featuredGames = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [isMutating, setIsMutating] = useState(false)
+  const { isAuthenticated } = useAuth()
   const { isInLibrary, toggleLibrary } = useLibrary()
+  const navigate = useNavigate()
 
   // Auto cycle carousel every 7 seconds
   useEffect(() => {
@@ -114,14 +119,28 @@ export default function HeroSection({ featuredGames = [] }) {
 
               <button
                 type="button"
-                onClick={() => toggleLibrary(currentGame.slug)}
-                className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
+                disabled={isMutating}
+                onClick={async () => {
+                  if (!isAuthenticated) {
+                    navigate('/login')
+                    return
+                  }
+                  setIsMutating(true)
+                  await toggleLibrary(currentGame.slug)
+                  setIsMutating(false)
+                }}
+                className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer disabled:opacity-75 ${
                   isSaved
                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                     : 'bg-white/10 hover:bg-white/15 border-white/15 text-white hover:border-white/30'
                 }`}
               >
-                {isSaved ? (
+                {isMutating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Memproses...</span>
+                  </>
+                ) : isSaved ? (
                   <>
                     <Check className="w-4 h-4 text-emerald-400" />
                     <span>In Library</span>

@@ -8,16 +8,20 @@ import {
   Compass,
   ArrowRight,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 import { useLibrary } from '../context/useLibrary'
 
 export default function LibraryPage() {
-  const { libraryGames, removeFromLibrary } = useLibrary()
+  const { libraryGames, removeFromLibrary, isLoadingLibrary } = useLibrary()
   const [removingGame, setRemovingGame] = useState(null)
+  const [isRemoving, setIsRemoving] = useState(false)
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (removingGame) {
-      removeFromLibrary(removingGame.slug)
+      setIsRemoving(true)
+      await removeFromLibrary(removingGame.slug)
+      setIsRemoving(false)
       setRemovingGame(null)
     }
   }
@@ -46,8 +50,24 @@ export default function LibraryPage() {
         )}
       </div>
 
-      {/* Content: Empty State or Grid */}
-      {libraryGames.length === 0 ? (
+      {/* Content: Loading Skeleton, Empty State, or Grid */}
+      {isLoadingLibrary ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className="rounded-2xl bg-[#111726]/60 border border-slate-800/80 p-4 space-y-4 animate-pulse"
+            >
+              <div className="aspect-[16/10] rounded-xl bg-slate-800/60" />
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 rounded bg-slate-800" />
+                <div className="h-3 w-1/2 rounded bg-slate-800/50" />
+              </div>
+              <div className="h-8 rounded-xl bg-slate-800/40" />
+            </div>
+          ))}
+        </div>
+      ) : libraryGames.length === 0 ? (
         <div className="py-20 text-center rounded-3xl bg-[#111726]/40 border border-slate-800/80 p-8 sm:p-12 space-y-5">
           <div className="inline-flex p-4 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-lg">
             <Gamepad2 className="w-12 h-12" />
@@ -170,10 +190,12 @@ export default function LibraryPage() {
               </button>
               <button
                 type="button"
+                disabled={isRemoving}
                 onClick={confirmRemove}
-                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-red-600/30"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-red-600/30"
               >
-                Ya, Hapus
+                {isRemoving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isRemoving ? 'Menghapus...' : 'Ya, Hapus'}</span>
               </button>
             </div>
           </div>

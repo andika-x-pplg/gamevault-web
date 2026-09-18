@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   Save,
@@ -8,11 +8,18 @@ import {
   Sparkles,
   Info,
   ShieldAlert,
+  Loader2,
 } from 'lucide-react'
-import { useGame } from '../../context/useGame'
+import { getAdminGame, createAdminGame, updateAdminGame } from '../../services/adminGameService'
+import { getAdminCategories } from '../../services/adminCategoryService'
 import { useToast } from '../../context/useToast'
 
-const GAME_TYPES = ['Free-to-Play', 'Freeware', 'Open Source', 'Demo']
+const GAME_TYPES = [
+  { label: 'Free-to-Play', value: 'free-to-play' },
+  { label: 'Freeware', value: 'freeware' },
+  { label: 'Open Source', value: 'open-source' },
+  { label: 'Demo', value: 'demo' },
+]
 
 const INITIAL_FORM_STATE = {
   title: '',
@@ -22,7 +29,7 @@ const INITIAL_FORM_STATE = {
   developer: '',
   publisher: '',
   genre: 'Action',
-  license: 'Free-to-Play',
+  license: 'free-to-play',
   releaseDate: new Date().toISOString().split('T')[0],
   version: 'v1.0.0',
   fileSize: '500 MB',
@@ -57,67 +64,144 @@ function generateSlug(text) {
     .replace(/^-+|-+$/g, '')
 }
 
-function mapGameToFormData(existingGame) {
-  if (!existingGame) return null
+function mapApiGameToFormData(game) {
+  if (!game) return null
+
+  // System requirements
+  const minReq = game.system_requirements?.minimum || {}
+  const recReq = game.system_requirements?.recommended || {}
+
+  // Screenshots string
+  let screenshotsStr = ''
+  if (Array.isArray(game.screenshots)) {
+    screenshotsStr = game.screenshots
+      .map((s) => (typeof s === 'string' ? s : s.image_url))
+      .filter(Boolean)
+      .join(', ')
+  }
+
+  // Categories / Genre
+  let genreName = 'Action'
+  if (Array.isArray(game.categories) && game.categories.length > 0) {
+    genreName = game.categories[0].name || game.categories[0].slug || 'Action'
+  }
+
+  // Languages string
+  let languagesStr = 'English, Indonesian'
+  if (Array.isArray(game.supported_languages)) {
+    languagesStr = game.supported_languages.join(', ')
+  } else if (typeof game.supported_languages === 'string') {
+    languagesStr = game.supported_languages
+  }
+
   return {
-    title: existingGame.title || '',
-    slug: existingGame.slug || '',
-    shortDescription: existingGame.shortDescription || '',
-    description: existingGame.description || '',
-    developer: existingGame.developer || '',
-    publisher: existingGame.publisher || '',
-    genre: existingGame.genre || 'Action',
-    license: existingGame.license || 'Free-to-Play',
-    releaseDate: existingGame.releaseDate || new Date().toISOString().split('T')[0],
-    version: existingGame.version || 'v1.0.0',
-    fileSize: existingGame.fileSize || '500 MB',
-    languages: existingGame.languages || 'English, Indonesian',
-    image: existingGame.image || '',
-    banner: existingGame.banner || '',
-    screenshots: Array.isArray(existingGame.screenshots)
-      ? existingGame.screenshots.join(', ')
-      : existingGame.screenshots || '',
-    officialSourceName: existingGame.officialSource?.name || 'Official Portal',
-    officialSourceUrl: existingGame.officialSource?.url || 'https://github.com',
-    status: existingGame.status || 'Published',
-    minOs: existingGame.systemRequirements?.minimum?.os || 'Windows 10 / 11 (64-bit)',
-    minProcessor: existingGame.systemRequirements?.minimum?.processor || 'Intel Core i3',
-    minMemory: existingGame.systemRequirements?.minimum?.memory || '4 GB RAM',
-    minGraphics: existingGame.systemRequirements?.minimum?.graphics || 'DirectX 11 Graphics',
-    minStorage: existingGame.systemRequirements?.minimum?.storage || '2 GB space',
-    minDirectX: existingGame.systemRequirements?.minimum?.directX || 'Version 11',
-    recOs: existingGame.systemRequirements?.recommended?.os || 'Windows 10 / 11 (64-bit)',
-    recProcessor: existingGame.systemRequirements?.recommended?.processor || 'Intel Core i5',
-    recMemory: existingGame.systemRequirements?.recommended?.memory || '8 GB RAM',
-    recGraphics: existingGame.systemRequirements?.recommended?.graphics || 'NVIDIA GTX 1060',
-    recStorage: existingGame.systemRequirements?.recommended?.storage || '5 GB space',
-    recDirectX: existingGame.systemRequirements?.recommended?.directX || 'Version 12',
+    title: game.title || '',
+    slug: game.slug || '',
+    shortDescription: game.short_description || '',
+    description: game.description || '',
+    developer: game.developer || '',
+    publisher: game.publisher || '',
+    genre: genreName,
+    license: game.game_type || 'free-to-play',
+    releaseDate: game.release_date || new Date().toISOString().split('T')[0],
+    version: game.version || 'v1.0.0',
+    fileSize: game.file_size || '500 MB',
+    languages: languagesStr,
+    image: game.cover_image || game.image || '',
+    banner: game.banner_image || game.banner || '',
+    screenshots: screenshotsStr,
+    officialSourceName: game.official_source?.name || game.official_source_name || 'Official Portal',
+    officialSourceUrl: game.official_source?.url || game.official_source_url || 'https://github.com',
+    status: game.status ? game.status.charAt(0).toUpperCase() + game.status.slice(1).toLowerCase() : 'Published',
+    minOs: minReq.os || 'Windows 10 / 11 (64-bit)',
+    minProcessor: minReq.processor || 'Intel Core i3',
+    minMemory: minReq.memory || '4 GB RAM',
+    minGraphics: minReq.graphics || 'DirectX 11 Graphics',
+    minStorage: minReq.storage || '2 GB space',
+    minDirectX: minReq.directx || 'Version 11',
+    recOs: recReq.os || 'Windows 10 / 11 (64-bit)',
+    recProcessor: recReq.processor || 'Intel Core i5',
+    recMemory: recReq.memory || '8 GB RAM',
+    recGraphics: recReq.graphics || 'NVIDIA GTX 1060',
+    recStorage: recReq.storage || '5 GB space',
+    recDirectX: recReq.directx || 'Version 12',
   }
 }
 
 export default function AdminGameFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { games, categories, getGameById, createGame, updateGame } = useGame()
-  const { success } = useToast()
+  const { success, error: toastError } = useToast()
 
   const isEditMode = !!id
 
-  const [formData, setFormData] = useState(() => {
-    if (isEditMode) {
-      const existing = getGameById(id)
-      const mapped = mapGameToFormData(existing)
-      return mapped || INITIAL_FORM_STATE
-    }
-    return INITIAL_FORM_STATE
-  })
-
+  const [categories, setCategories] = useState([])
+  const [formData, setFormData] = useState(INITIAL_FORM_STATE)
   const [errors, setErrors] = useState({})
   const [isSlugManual, setIsSlugManual] = useState(isEditMode)
+  const [isLoadingGame, setIsLoadingGame] = useState(isEditMode)
+  const [notFound, setNotFound] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Verify not found condition safely
-  const notFound = isEditMode && !getGameById(id)
+  // Fetch categories
+  useEffect(() => {
+    let isMounted = true
+    async function loadCategories() {
+      try {
+        const res = await getAdminCategories()
+        if (isMounted && res?.data) {
+          setCategories(res.data)
+        }
+      } catch {
+        // Fallback
+      }
+    }
+    loadCategories()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Fetch game data when in Edit Mode
+  useEffect(() => {
+    if (!isEditMode) return
+
+    let isMounted = true
+    async function loadGameDetails() {
+      setIsLoadingGame(true)
+      setNotFound(false)
+
+      try {
+        const response = await getAdminGame(id)
+        if (isMounted && response?.data) {
+          const mapped = mapApiGameToFormData(response.data)
+          if (mapped) {
+            setFormData(mapped)
+          }
+        } else {
+          setNotFound(true)
+        }
+      } catch (err) {
+        if (isMounted) {
+          if (err.response?.status === 404) {
+            setNotFound(true)
+          } else {
+            toastError(err.response?.data?.message || 'Failed to load game details.')
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingGame(false)
+        }
+      }
+    }
+
+    loadGameDetails()
+
+    return () => {
+      isMounted = false
+    }
+  }, [id, isEditMode, toastError])
 
   // Handle auto-slug on title change
   const handleTitleChange = (e) => {
@@ -146,14 +230,6 @@ export default function AdminGameFormPage() {
       newErrors.slug = 'Slug is required.'
     } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(formData.slug.trim())) {
       newErrors.slug = 'Slug must only contain lowercase alphanumeric letters and hyphens.'
-    } else {
-      // Check slug uniqueness against other games
-      const duplicate = games.find(
-        (g) => g.slug === formData.slug.trim() && String(g.id) !== String(id)
-      )
-      if (duplicate) {
-        newErrors.slug = `Slug "${formData.slug}" is already in use by game "${duplicate.title}".`
-      }
     }
 
     if (!formData.shortDescription.trim()) newErrors.shortDescription = 'Short description is required.'
@@ -177,7 +253,7 @@ export default function AdminGameFormPage() {
   }
 
   // Handle submit
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!validateForm()) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -186,7 +262,7 @@ export default function AdminGameFormPage() {
 
     setIsSubmitting(true)
 
-    // Prepare clean game object
+    // Prepare clean game payload for Laravel API
     const screenshotsList = formData.screenshots
       .split(',')
       .map((s) => s.trim())
@@ -195,33 +271,37 @@ export default function AdminGameFormPage() {
     const payload = {
       title: formData.title.trim(),
       slug: formData.slug.trim(),
-      shortDescription: formData.shortDescription.trim(),
+      short_description: formData.shortDescription.trim(),
       description: formData.description.trim(),
       developer: formData.developer.trim(),
       publisher: formData.publisher.trim() || formData.developer.trim(),
-      genre: formData.genre,
-      genres: [formData.genre, formData.license],
-      license: formData.license,
-      releaseDate: formData.releaseDate,
+      game_type: formData.license,
+      release_date: formData.releaseDate,
       version: formData.version.trim(),
-      fileSize: formData.fileSize.trim(),
-      languages: formData.languages.trim(),
-      image: formData.image.trim() || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
-      banner: formData.banner.trim() || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80',
+      file_size: formData.fileSize.trim(),
+      supported_languages: formData.languages
+        .split(',')
+        .map((l) => l.trim())
+        .filter(Boolean),
+      cover_image:
+        formData.image.trim() ||
+        'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
+      banner_image:
+        formData.banner.trim() ||
+        'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80',
       screenshots: screenshotsList.length > 0 ? screenshotsList : [formData.image],
-      status: formData.status,
-      officialSource: {
-        name: formData.officialSourceName.trim() || 'Official Distribution Source',
-        url: formData.officialSourceUrl.trim() || 'https://github.com',
-      },
-      systemRequirements: {
+      status: formData.status.toLowerCase(),
+      official_source_name: formData.officialSourceName.trim() || 'Official Distribution Source',
+      official_source_url: formData.officialSourceUrl.trim() || 'https://github.com',
+      categories: [formData.genre],
+      system_requirements: {
         minimum: {
           os: formData.minOs,
           processor: formData.minProcessor,
           memory: formData.minMemory,
           graphics: formData.minGraphics,
           storage: formData.minStorage,
-          directX: formData.minDirectX,
+          directx: formData.minDirectX,
         },
         recommended: {
           os: formData.recOs,
@@ -229,22 +309,56 @@ export default function AdminGameFormPage() {
           memory: formData.recMemory,
           graphics: formData.recGraphics,
           storage: formData.recStorage,
-          directX: formData.recDirectX,
+          directx: formData.recDirectX,
         },
       },
     }
 
-    setTimeout(() => {
+    try {
       if (isEditMode) {
-        updateGame(id, payload)
-        success(`Game "${payload.title}" updated successfully.`)
+        const response = await updateAdminGame(id, payload)
+        success(response?.message || `Game "${payload.title}" updated successfully in MySQL.`)
       } else {
-        createGame(payload)
-        success(`Game "${payload.title}" created successfully as ${payload.status}.`)
+        const response = await createAdminGame(payload)
+        success(
+          response?.message || `Game "${payload.title}" created successfully as ${formData.status}.`
+        )
       }
-      setIsSubmitting(false)
       navigate('/admin/games')
-    }, 250)
+    } catch (err) {
+      if (err.response?.status === 422 && err.response?.data?.errors) {
+        const apiErrors = err.response.data.errors
+        const mappedErrors = {}
+
+        if (apiErrors.title) mappedErrors.title = apiErrors.title[0]
+        if (apiErrors.slug) mappedErrors.slug = apiErrors.slug[0]
+        if (apiErrors.short_description) mappedErrors.shortDescription = apiErrors.short_description[0]
+        if (apiErrors.description) mappedErrors.description = apiErrors.description[0]
+        if (apiErrors.developer) mappedErrors.developer = apiErrors.developer[0]
+        if (apiErrors.publisher) mappedErrors.publisher = apiErrors.publisher[0]
+        if (apiErrors.game_type) mappedErrors.license = apiErrors.game_type[0]
+        if (apiErrors.version) mappedErrors.version = apiErrors.version[0]
+        if (apiErrors.file_size) mappedErrors.fileSize = apiErrors.file_size[0]
+        if (apiErrors.official_source_url) mappedErrors.officialSourceUrl = apiErrors.official_source_url[0]
+
+        setErrors(mappedErrors)
+        toastError('Please check form fields with validation errors.')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        toastError(err.response?.data?.message || err.message || 'Failed to save game to database.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoadingGame) {
+    return (
+      <div className="p-16 rounded-2xl bg-surface-850 border border-surface-700 text-center space-y-3">
+        <Loader2 className="w-8 h-8 text-primary-400 animate-spin mx-auto" />
+        <p className="text-sm font-medium text-gray-300">Loading game details from database...</p>
+      </div>
+    )
   }
 
   if (notFound) {
@@ -252,7 +366,7 @@ export default function AdminGameFormPage() {
       <div className="p-12 rounded-2xl bg-surface-850 border border-surface-700 text-center space-y-4">
         <AlertCircle className="w-12 h-12 text-rose-400 mx-auto" />
         <h3 className="text-xl font-bold text-white">Game Not Found</h3>
-        <p className="text-gray-400 text-sm">The game with ID #{id} does not exist in the mock dataset.</p>
+        <p className="text-gray-400 text-sm">The game with identifier "{id}" does not exist in MySQL database.</p>
         <Link
           to="/admin/games"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-700 text-white font-medium text-sm hover:bg-surface-600"
@@ -281,7 +395,7 @@ export default function AdminGameFormPage() {
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {isEditMode
-                ? 'Update metadata, system requirements, media, and publishing status.'
+                ? 'Update metadata, system requirements, media, and publishing status in MySQL.'
                 : 'Fill in complete details to add a new legal PC game to GameVault catalog.'}
             </p>
           </div>
@@ -300,8 +414,17 @@ export default function AdminGameFormPage() {
             disabled={isSubmitting}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-semibold text-sm transition-all shadow-lg shadow-primary-600/25 active:scale-95 disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            {isSubmitting ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save Game'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                {isEditMode ? 'Save Changes' : 'Save Game'}
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -460,7 +583,7 @@ export default function AdminGameFormPage() {
             {/* Genre */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                Primary Genre <span className="text-rose-400">*</span>
+                Primary Category <span className="text-rose-400">*</span>
               </label>
               <select
                 name="genre"
@@ -488,8 +611,8 @@ export default function AdminGameFormPage() {
                 className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-white focus:outline-none focus:border-primary-500 cursor-pointer"
               >
                 {GAME_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
+                  <option key={type.value} value={type.value}>
+                    {type.label}
                   </option>
                 ))}
               </select>
@@ -596,7 +719,8 @@ export default function AdminGameFormPage() {
                     alt="Cover preview"
                     className="w-16 h-16 rounded-lg object-cover border border-surface-700"
                     onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80'
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80'
                     }}
                   />
                   <span className="text-xs text-gray-400">Cover image preview</span>
@@ -624,7 +748,8 @@ export default function AdminGameFormPage() {
                     alt="Banner preview"
                     className="w-24 h-16 rounded-lg object-cover border border-surface-700"
                     onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80'
+                      e.target.src =
+                        'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80'
                     }}
                   />
                   <span className="text-xs text-gray-400">Wide banner preview</span>
@@ -876,8 +1001,17 @@ export default function AdminGameFormPage() {
             disabled={isSubmitting}
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-semibold text-sm transition-all shadow-lg shadow-primary-600/25 active:scale-95 disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            {isSubmitting ? 'Saving Game...' : isEditMode ? 'Save Changes' : 'Publish Game'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving Game...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                {isEditMode ? 'Save Changes' : 'Publish Game'}
+              </>
+            )}
           </button>
         </div>
       </form>

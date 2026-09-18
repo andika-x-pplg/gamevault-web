@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   Star,
   Download,
@@ -11,7 +11,9 @@ import {
   SearchX,
   Compass,
   FileText,
+  Loader2,
 } from 'lucide-react'
+import { useAuth } from '../context/useAuth'
 import { useLibrary } from '../context/useLibrary'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 import GameInformation from '../components/GameInformation'
@@ -24,13 +26,19 @@ import { getGameBySlug } from '../services/gameService'
 
 export default function GameDetailPage() {
   const { slug } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { isAuthenticated } = useAuth()
+
   const [game, setGame] = useState(null)
   const [loading, setLoading] = useState(true)
   const [isNotFound, setIsNotFound] = useState(false)
   const [error, setError] = useState(null)
   const [retryTrigger, setRetryTrigger] = useState(0)
+  const [isMutatingLibrary, setIsMutatingLibrary] = useState(false)
+  const [isMutatingWishlist, setIsMutatingWishlist] = useState(false)
 
-  // Global Library & Wishlist Context (localStorage based)
+  // Global Library & Wishlist Context (database backed)
   const { isInLibrary, toggleLibrary, isInWishlist, toggleWishlist } = useLibrary()
 
   // Scroll to top whenever slug changes
@@ -259,14 +267,28 @@ export default function GameDetailPage() {
                 {/* Add to Library Toggle */}
                 <button
                   type="button"
-                  onClick={() => toggleLibrary(game.slug)}
-                  className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
+                  disabled={isMutatingLibrary}
+                  onClick={async () => {
+                    if (!isAuthenticated) {
+                      navigate('/login', { state: { from: location } })
+                      return
+                    }
+                    setIsMutatingLibrary(true)
+                    await toggleLibrary(game.slug)
+                    setIsMutatingLibrary(false)
+                  }}
+                  className={`inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer disabled:opacity-75 ${
                     inLibrary
                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                       : 'bg-slate-900/80 hover:bg-slate-800 border-slate-700 text-white'
                   }`}
                 >
-                  {inLibrary ? (
+                  {isMutatingLibrary ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                      <span>Memproses...</span>
+                    </>
+                  ) : inLibrary ? (
                     <>
                       <Check className="w-4 h-4 text-emerald-400" />
                       <span>In Library</span>
@@ -282,8 +304,17 @@ export default function GameDetailPage() {
                 {/* Wishlist Toggle */}
                 <button
                   type="button"
-                  onClick={() => toggleWishlist(game.slug)}
-                  className={`inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer ${
+                  disabled={isMutatingWishlist}
+                  onClick={async () => {
+                    if (!isAuthenticated) {
+                      navigate('/login', { state: { from: location } })
+                      return
+                    }
+                    setIsMutatingWishlist(true)
+                    await toggleWishlist(game.slug)
+                    setIsMutatingWishlist(false)
+                  }}
+                  className={`inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border backdrop-blur-md cursor-pointer disabled:opacity-75 ${
                     isWishlisted
                       ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
                       : 'bg-slate-900/80 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
@@ -291,11 +322,15 @@ export default function GameDetailPage() {
                   title="Toggle Wishlist"
                   aria-label="Wishlist"
                 >
-                  <Heart
-                    className={`w-4 h-4 ${
-                      isWishlisted ? 'fill-rose-400 text-rose-400' : 'text-slate-400'
-                    }`}
-                  />
+                  {isMutatingWishlist ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                  ) : (
+                    <Heart
+                      className={`w-4 h-4 ${
+                        isWishlisted ? 'fill-rose-400 text-rose-400' : 'text-slate-400'
+                      }`}
+                    />
+                  )}
                   <span>{isWishlisted ? 'Wishlisted' : 'Wishlist'}</span>
                 </button>
               </div>

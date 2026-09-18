@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Heart,
@@ -8,11 +9,25 @@ import {
   ArrowRight,
   Plus,
   Check,
+  Loader2,
 } from 'lucide-react'
 import { useLibrary } from '../context/useLibrary'
 
 export default function WishlistPage() {
-  const { wishlistGames, removeFromWishlist, addToLibrary, isInLibrary } = useLibrary()
+  const { wishlistGames, removeFromWishlist, addToLibrary, isInLibrary, isLoadingWishlist } = useLibrary()
+  const [processingSlugs, setProcessingSlugs] = useState({})
+
+  const handleAddToLibrary = async (slug) => {
+    setProcessingSlugs((prev) => ({ ...prev, [slug]: true }))
+    await addToLibrary(slug)
+    setProcessingSlugs((prev) => ({ ...prev, [slug]: false }))
+  }
+
+  const handleRemove = async (slug) => {
+    setProcessingSlugs((prev) => ({ ...prev, [slug]: true }))
+    await removeFromWishlist(slug)
+    setProcessingSlugs((prev) => ({ ...prev, [slug]: false }))
+  }
 
   return (
     <div className="space-y-8 py-4">
@@ -38,8 +53,24 @@ export default function WishlistPage() {
         )}
       </div>
 
-      {/* Content: Empty State or Grid */}
-      {wishlistGames.length === 0 ? (
+      {/* Content: Loading Skeleton, Empty State or Grid */}
+      {isLoadingWishlist ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className="rounded-2xl bg-[#111726]/60 border border-slate-800/80 p-4 space-y-4 animate-pulse"
+            >
+              <div className="aspect-[16/10] rounded-xl bg-slate-800/60" />
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 rounded bg-slate-800" />
+                <div className="h-3 w-1/2 rounded bg-slate-800/50" />
+              </div>
+              <div className="h-8 rounded-xl bg-slate-800/40" />
+            </div>
+          ))}
+        </div>
+      ) : wishlistGames.length === 0 ? (
         <div className="py-20 text-center rounded-3xl bg-[#111726]/40 border border-slate-800/80 p-8 sm:p-12 space-y-5">
           <div className="inline-flex p-4 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-lg">
             <Heart className="w-12 h-12" />
@@ -64,6 +95,8 @@ export default function WishlistPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {wishlistGames.map((game) => {
             const inLibrary = isInLibrary(game.slug)
+            const isBusy = !!processingSlugs[game.slug]
+
             return (
               <div
                 key={game.id}
@@ -118,20 +151,22 @@ export default function WishlistPage() {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => removeFromWishlist(game.slug)}
-                        className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-all cursor-pointer"
+                        disabled={isBusy}
+                        onClick={() => handleRemove(game.slug)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 disabled:opacity-50 transition-all cursor-pointer"
                         title="Remove from Wishlist"
                         aria-label={`Remove ${game.title} from Wishlist`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
 
                     {/* Add to Library action button */}
                     <button
                       type="button"
-                      onClick={() => addToLibrary(game.slug)}
-                      className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-semibold text-xs transition-colors cursor-pointer ${
+                      disabled={isBusy || inLibrary}
+                      onClick={() => handleAddToLibrary(game.slug)}
+                      className={`w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-semibold text-xs transition-colors cursor-pointer disabled:opacity-75 ${
                         inLibrary
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20'
@@ -144,7 +179,11 @@ export default function WishlistPage() {
                         </>
                       ) : (
                         <>
-                          <Plus className="w-3.5 h-3.5" />
+                          {isBusy ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="w-3.5 h-3.5" />
+                          )}
                           <span>Add to Library</span>
                         </>
                       )}
