@@ -166,6 +166,10 @@ export function normalizeGame(apiGame) {
     status: apiGame.status || 'published',
     featured: Boolean(apiGame.featured ?? apiGame.is_featured),
     trending: Boolean(apiGame.trending ?? (downloadCountNum > 100000 || apiGame.rating >= 4.7)),
+    downloadType: apiGame.download_type || apiGame.downloadType || 'external',
+    download_type: apiGame.download_type || apiGame.downloadType || 'external',
+    directDownloadUrl: apiGame.direct_download_url || apiGame.directDownloadUrl || '',
+    direct_download_url: apiGame.direct_download_url || apiGame.directDownloadUrl || '',
     categories: categories,
     genre: primaryGenre,
     genres: categoryNames,
@@ -174,9 +178,23 @@ export function normalizeGame(apiGame) {
       apiGame.system_requirements || apiGame.systemRequirements
     ),
     officialSource: apiGame.official_source || apiGame.officialSource || {
-      name: `${apiGame.title} Official Portal`,
-      url: 'https://github.com',
+      name: apiGame.official_source_name || `${apiGame.title} Official Portal`,
+      url: apiGame.official_source_url || 'https://github.com',
     },
+    officialSourceName:
+      apiGame.official_source_name ||
+      apiGame.officialSourceName ||
+      (apiGame.official_source && typeof apiGame.official_source === 'object'
+        ? apiGame.official_source.name
+        : '') ||
+      'Official Source',
+    officialSourceUrl:
+      apiGame.official_source_url ||
+      apiGame.officialSourceUrl ||
+      (apiGame.official_source && typeof apiGame.official_source === 'object'
+        ? apiGame.official_source.url
+        : '') ||
+      '',
     languages: languagesFormatted,
     supportedLanguages: apiGame.supported_languages || ['English'],
   }

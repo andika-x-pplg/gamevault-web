@@ -40,6 +40,8 @@ const INITIAL_FORM_STATE = {
     'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80, https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80',
   officialSourceName: 'Official Portal',
   officialSourceUrl: 'https://github.com',
+  downloadType: 'external',
+  directDownloadUrl: '',
   status: 'Published',
   minOs: 'Windows 10 / 11 (64-bit)',
   minProcessor: 'Intel Core i3-4150 / AMD FX-6300',
@@ -103,6 +105,8 @@ function mapApiGameToFormData(game) {
     publisher: game.publisher || '',
     genre: genreName,
     license: game.game_type || 'free-to-play',
+    downloadType: game.download_type || game.downloadType || 'external',
+    directDownloadUrl: game.direct_download_url || game.directDownloadUrl || '',
     releaseDate: game.release_date || new Date().toISOString().split('T')[0],
     version: game.version || 'v1.0.0',
     fileSize: game.file_size || '500 MB',
@@ -240,11 +244,30 @@ export default function AdminGameFormPage() {
     if (!formData.version.trim()) newErrors.version = 'Version string is required.'
     if (!formData.fileSize.trim()) newErrors.fileSize = 'File size is required.'
 
-    if (formData.officialSourceUrl.trim()) {
-      try {
-        new URL(formData.officialSourceUrl.trim())
-      } catch {
-        newErrors.officialSourceUrl = 'Must be a valid URL (e.g., https://...)'
+    if (formData.downloadType === 'direct') {
+      if (!formData.directDownloadUrl.trim()) {
+        newErrors.directDownloadUrl = 'Direct Download URL is required when Direct Download is selected.'
+      } else {
+        try {
+          if (!formData.directDownloadUrl.startsWith('/')) {
+            new URL(formData.directDownloadUrl.trim())
+          }
+        } catch {
+          newErrors.directDownloadUrl = 'Must be a valid URL (e.g., https://...)'
+        }
+      }
+    } else {
+      if (!formData.officialSourceName.trim()) {
+        newErrors.officialSourceName = 'Official Source Name is required for External Distribution.'
+      }
+      if (!formData.officialSourceUrl.trim()) {
+        newErrors.officialSourceUrl = 'Official Source URL is required for External Distribution.'
+      } else {
+        try {
+          new URL(formData.officialSourceUrl.trim())
+        } catch {
+          newErrors.officialSourceUrl = 'Must be a valid URL (e.g., https://...)'
+        }
       }
     }
 
@@ -276,6 +299,8 @@ export default function AdminGameFormPage() {
       developer: formData.developer.trim(),
       publisher: formData.publisher.trim() || formData.developer.trim(),
       game_type: formData.license,
+      download_type: formData.downloadType,
+      direct_download_url: formData.downloadType === 'direct' ? formData.directDownloadUrl.trim() : null,
       release_date: formData.releaseDate,
       version: formData.version.trim(),
       file_size: formData.fileSize.trim(),
@@ -892,52 +917,131 @@ export default function AdminGameFormPage() {
         </div>
 
         {/* Section 5: Distribution & Legal Source */}
-        <div className="p-6 rounded-2xl bg-surface-850 border border-surface-700/60 shadow-lg space-y-4">
+        <div className="p-6 rounded-2xl bg-surface-850 border border-surface-700/60 shadow-lg space-y-5">
           <div className="flex items-center gap-2 pb-3 border-b border-surface-750">
             <ShieldAlert className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold text-white">5. Distribution & Legal Compliance</h3>
+            <h3 className="text-lg font-bold text-white">5. Distribution & Download Method</h3>
           </div>
 
           <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 leading-relaxed">
-            <strong>Catatan Kepatuhan GameVault:</strong> Semua game yang didaftarkan harus memiliki sumber distribusi yang resmi, legal, dan terverifikasi (Official Developer Portal, Steam Free/Demo, Epic Games, Itch.io Freeware, atau GitHub Open Source repository).
+            <strong>Catatan Kepatuhan GameVault:</strong> Semua game yang didaftarkan harus memiliki sumber distribusi yang resmi, legal, dan terverifikasi (Official Developer Portal, Steam Free/Demo, Epic Games, Itch.io Freeware, atau GitHub Open Source repository). Direct Download hanya untuk file installer/arsip resmi bebas lisensi.
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                Official Source Name
+          <div className="space-y-3">
+            <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block">
+              Download Delivery Type <span className="text-rose-400">*</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  formData.downloadType === 'direct'
+                    ? 'bg-primary-500/15 border-primary-500 text-white'
+                    : 'bg-surface-900 border-surface-700 text-gray-400 hover:border-surface-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="downloadType"
+                  value="direct"
+                  checked={formData.downloadType === 'direct'}
+                  onChange={handleChange}
+                  className="mt-0.5 text-primary-500 focus:ring-primary-500"
+                />
+                <div>
+                  <div className="font-semibold text-sm text-white">Direct Download</div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Browser langsung mengunduh file resmi / fixture pengujian via server backend.
+                  </p>
+                </div>
               </label>
-              <input
-                type="text"
-                name="officialSourceName"
-                value={formData.officialSourceName}
-                onChange={handleChange}
-                placeholder="e.g. Official Developer Website / Steam"
-                className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-white focus:outline-none focus:border-primary-500"
-              />
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                Official Source URL
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  formData.downloadType === 'external'
+                    ? 'bg-primary-500/15 border-primary-500 text-white'
+                    : 'bg-surface-900 border-surface-700 text-gray-400 hover:border-surface-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="downloadType"
+                  value="external"
+                  checked={formData.downloadType === 'external'}
+                  onChange={handleChange}
+                  className="mt-0.5 text-primary-500 focus:ring-primary-500"
+                />
+                <div>
+                  <div className="font-semibold text-sm text-white">External Official Distribution</div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    User diarahkan ke storefront / portal resmi (Steam, Epic, Itch.io, GitHub, Web Resmi).
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {formData.downloadType === 'direct' ? (
+            <div className="space-y-1.5 p-4 rounded-xl bg-surface-900/80 border border-surface-700/80">
+              <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block">
+                Direct Download URL / Endpoint Path
               </label>
               <input
                 type="text"
-                name="officialSourceUrl"
-                value={formData.officialSourceUrl}
+                name="directDownloadUrl"
+                value={formData.directDownloadUrl}
                 onChange={handleChange}
-                placeholder="https://..."
+                placeholder="https://... atau /api/downloads/fixture"
                 className={`w-full px-4 py-2.5 bg-surface-900 border rounded-xl text-sm font-mono text-white focus:outline-none focus:ring-1 ${
-                  errors.officialSourceUrl
+                  errors.directDownloadUrl
                     ? 'border-rose-500 focus:ring-rose-500'
                     : 'border-surface-700 focus:border-primary-500 focus:ring-primary-500'
                 }`}
               />
-              {errors.officialSourceUrl && (
-                <p className="text-xs text-rose-400">{errors.officialSourceUrl}</p>
+              <p className="text-[11px] text-gray-400">
+                Kosongkan untuk otomatis menggunakan fixture pengujian resmi GameVault (<code>/api/downloads/fixture</code>).
+              </p>
+              {errors.directDownloadUrl && (
+                <p className="text-xs text-rose-400">{errors.directDownloadUrl}</p>
               )}
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-surface-900/80 border border-surface-700/80">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                  Official Store / Source Name
+                </label>
+                <input
+                  type="text"
+                  name="officialSourceName"
+                  value={formData.officialSourceName}
+                  onChange={handleChange}
+                  placeholder="e.g. Steam / Epic Games / GitHub / Official Website"
+                  className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-white focus:outline-none focus:border-primary-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                  Official Store / Source URL <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="officialSourceUrl"
+                  value={formData.officialSourceUrl}
+                  onChange={handleChange}
+                  placeholder="https://store.steampowered.com/app/..."
+                  className={`w-full px-4 py-2.5 bg-surface-900 border rounded-xl text-sm font-mono text-white focus:outline-none focus:ring-1 ${
+                    errors.officialSourceUrl
+                      ? 'border-rose-500 focus:ring-rose-500'
+                      : 'border-surface-700 focus:border-primary-500 focus:ring-primary-500'
+                  }`}
+                />
+                {errors.officialSourceUrl && (
+                  <p className="text-xs text-rose-400">{errors.officialSourceUrl}</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Section 6: Publishing Controls */}

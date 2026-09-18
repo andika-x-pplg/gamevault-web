@@ -50,6 +50,16 @@ class AdminGameRequest extends FormRequest
             $mergeData['supported_languages'] = $langs;
         }
 
+        if ($this->has('downloadType') && ! $this->has('download_type')) {
+            $mergeData['download_type'] = strtolower(trim((string) $this->input('downloadType')));
+        } elseif ($this->has('download_type')) {
+            $mergeData['download_type'] = strtolower(trim((string) $this->input('download_type')));
+        }
+
+        if ($this->has('directDownloadUrl') && ! $this->has('direct_download_url')) {
+            $mergeData['direct_download_url'] = $this->input('directDownloadUrl');
+        }
+
         // Normalize shortDescription / description aliases if camelCase
         if ($this->has('shortDescription') && ! $this->has('short_description')) {
             $mergeData['short_description'] = $this->input('shortDescription');
@@ -117,6 +127,13 @@ class AdminGameRequest extends FormRequest
             'developer' => ['required', 'string', 'max:255'],
             'publisher' => ['nullable', 'string', 'max:255'],
             'game_type' => ['required', 'string', Rule::in(['free-to-play', 'freeware', 'open-source', 'demo'])],
+            'download_type' => ['nullable', 'string', Rule::in(['direct', 'external'])],
+            'direct_download_url' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->input('download_type') === 'direct'),
+                'string',
+                'max:2048',
+            ],
             'release_date' => ['nullable', 'date'],
             'version' => ['nullable', 'string', 'max:100'],
             'file_size' => ['nullable', 'string', 'max:100'],
@@ -127,8 +144,18 @@ class AdminGameRequest extends FormRequest
             'last_updated' => ['nullable', 'date'],
             'rating' => ['nullable', 'numeric', 'min:0', 'max:5'],
             'download_count' => ['nullable', 'integer', 'min:0'],
-            'official_source_name' => ['nullable', 'string', 'max:255'],
-            'official_source_url' => ['nullable', 'url'],
+            'official_source_name' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->input('download_type') === 'external' && $this->filled('official_source_url')),
+                'string',
+                'max:255',
+            ],
+            'official_source_url' => [
+                'nullable',
+                Rule::requiredIf(fn () => $this->input('download_type') === 'external' && $this->filled('official_source_name')),
+                'url',
+                'max:2048',
+            ],
             'status' => ['required', 'string', Rule::in(['draft', 'published'])],
             'featured' => ['nullable', 'boolean'],
 

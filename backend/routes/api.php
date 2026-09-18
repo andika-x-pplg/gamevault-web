@@ -8,8 +8,10 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\GameController;
 use Illuminate\Support\Facades\Route;
 
+use App\Http\Controllers\Api\DownloadController;
 use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\WishlistController;
+use App\Http\Controllers\Api\Admin\AdminDownloadController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,6 +28,9 @@ Route::get('/health', function () {
         'version' => '1.0.0',
     ], 200);
 });
+
+// Integration Test Download Fixture (Safe, development-only download file)
+Route::get('/downloads/fixture', [DownloadController::class, 'fixtureDownload']);
 
 // Authentication Routes (Public)
 Route::post('/register', [AuthController::class, 'register']);
@@ -45,12 +50,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/wishlist', [WishlistController::class, 'index']);
     Route::post('/wishlist/{game}', [WishlistController::class, 'store']);
     Route::delete('/wishlist/{game}', [WishlistController::class, 'destroy']);
+
+    // User Download History
+    Route::get('/downloads', [DownloadController::class, 'userHistory']);
 });
 
 // Admin Protected API Routes (Sanctum + Admin Middleware)
 Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
     Route::get('/verify', [AuthController::class, 'verifyAdmin']);
     Route::get('/dashboard', [AdminDashboardController::class, 'stats']);
+    Route::get('/downloads/stats', [AdminDownloadController::class, 'stats']);
 
     // Admin Games CRUD
     Route::apiResource('games', AdminGameController::class);
@@ -63,6 +72,7 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
 Route::get('/games', [GameController::class, 'index']);
 Route::get('/games/{slug}', [GameController::class, 'show']);
 Route::get('/games/{slug}/similar', [GameController::class, 'similar']);
+Route::post('/games/{game}/download', [DownloadController::class, 'download']);
 
 // Public Categories Endpoints
 Route::get('/categories', [CategoryController::class, 'index']);

@@ -26,6 +26,7 @@ class Game extends Model
         'developer',
         'publisher',
         'game_type',
+        'download_type',
         'release_date',
         'version',
         'file_size',
@@ -37,6 +38,7 @@ class Game extends Model
         'download_count',
         'official_source_name',
         'official_source_url',
+        'direct_download_url',
         'status',
         'featured',
     ];
@@ -147,5 +149,13 @@ class Game extends Model
     {
         return $this->belongsToMany(User::class, 'wishlist_games')
             ->withTimestamps();
+    }
+
+    /**
+     * Download events recorded for this game.
+     */
+    public function downloads(): HasMany
+    {
+        return $this->hasMany(Download::class);
     }
 }

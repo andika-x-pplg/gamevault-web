@@ -231,6 +231,8 @@ class AdminGamesApiTest extends TestCase
 
     public function test_admin_can_update_existing_game_without_creating_duplicates(): void
     {
+        Game::where('slug', 'original-game-title')->delete();
+
         $game = Game::create([
             'title' => 'Original Game Title',
             'slug' => 'original-game-title',

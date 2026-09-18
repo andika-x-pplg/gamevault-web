@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import {
   DownloadCloud,
   TrendingUp,
@@ -7,92 +7,95 @@ import {
   Award,
   ExternalLink,
   Loader2,
+  Clock,
+  User,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { getAdminGames } from '../../services/adminGameService'
-
-const WEEKLY_TREND = [
-  { day: 'Mon', count: 1820, height: '60%' },
-  { day: 'Tue', count: 2140, height: '70%' },
-  { day: 'Wed', count: 1980, height: '65%' },
-  { day: 'Thu', count: 2450, height: '80%' },
-  { day: 'Fri', count: 3120, height: '100%' },
-  { day: 'Sat', count: 2890, height: '92%' },
-  { day: 'Sun', count: 2650, height: '85%' },
-]
+import { getAdminDownloadStats } from '../../services/downloadService'
 
 export default function AdminDownloadsPage() {
-  const [games, setGames] = useState([])
+  const [statsData, setStatsData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      const res = await getAdminDownloadStats()
+      if (res?.data) {
+        setStatsData(res.data)
+      }
+    } catch {
+      // Handled silently
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
-    async function loadGamesData() {
-      try {
-        const response = await getAdminGames({ per_page: 100 })
-        if (isMounted && response?.data) {
-          setGames(response.data)
+
+    getAdminDownloadStats()
+      .then((res) => {
+        if (isMounted && res?.data) {
+          setStatsData(res.data)
         }
-      } catch {
-        // Fallback
-      } finally {
+      })
+      .catch(() => {
+        // Handled silently
+      })
+      .finally(() => {
         if (isMounted) {
           setIsLoading(false)
         }
-      }
-    }
-    loadGamesData()
+      })
+
     return () => {
       isMounted = false
     }
   }, [])
 
-  // Calculate dynamic stats from database records
-  const totalDownloadsNumber = useMemo(() => {
-    return games.reduce((acc, g) => acc + (g.download_count ?? g.downloadCount ?? 0), 0)
-  }, [games])
+  const overview = statsData?.overview || {
+    total_downloads: 0,
+    downloads_today: 0,
+    downloads_this_week: 0,
+    downloads_this_month: 0,
+  }
 
-  const leaderboard = useMemo(() => {
-    return [...games]
-      .sort((a, b) => (b.download_count ?? 0) - (a.download_count ?? 0))
-      .slice(0, 6)
-  }, [games])
+  const weeklyTrends = statsData?.weekly_trend || []
+  const licenseBreakdown = statsData?.license_breakdown || []
+  const leaderboard = statsData?.top_games || []
+  const recentDownloads = statsData?.recent_downloads || []
 
-  // Breakdown by License
-  const licenseBreakdown = useMemo(() => {
-    const counts = {}
-    games.forEach((g) => {
-      const type = g.game_type || g.license || 'free-to-play'
-      const formattedType =
-        type === 'free-to-play'
-          ? 'Free-to-Play'
-          : type === 'open-source'
-            ? 'Open Source'
-            : type.charAt(0).toUpperCase() + type.slice(1)
-
-      counts[formattedType] = (counts[formattedType] || 0) + (g.download_count ?? 0)
-    })
-
-    return Object.entries(counts).map(([type, total]) => {
-      const percentage = totalDownloadsNumber > 0 ? Math.round((total / totalDownloadsNumber) * 100) : 0
-      return { type, total, percentage }
-    })
-  }, [games, totalDownloadsNumber])
+  // Max weekly value for chart scaling
+  const maxWeeklyCount = Math.max(...weeklyTrends.map((w) => w.count), 1)
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Download & Distribution Analytics</h2>
-        <p className="text-sm text-gray-400 mt-0.5">
-          Detailed metrics of verified PC game installations, traffic patterns, and community engagement.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Download & Distribution Analytics</h2>
+          <p className="text-sm text-gray-400 mt-0.5">
+            Real-time MySQL metrics of verified game installations, legal traffic patterns, and user activity.
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={isLoading || isRefreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-surface-800 hover:bg-surface-750 text-gray-200 border border-surface-700 rounded-xl text-xs font-semibold transition-all self-start sm:self-auto disabled:opacity-50"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary-400' : ''}`} />
+          Refresh Stats
+        </button>
       </div>
 
       {isLoading ? (
         <div className="p-16 rounded-2xl bg-surface-850 border border-surface-700/60 text-center space-y-3">
           <Loader2 className="w-8 h-8 text-primary-400 animate-spin mx-auto" />
-          <p className="text-sm font-medium text-gray-300">Loading analytics from database...</p>
+          <p className="text-sm font-medium text-gray-300">Loading download analytics from MySQL database...</p>
         </div>
       ) : (
         <>
@@ -106,12 +109,12 @@ export default function AdminDownloadsPage() {
                 <DownloadCloud className="w-5 h-5 text-emerald-400" />
               </div>
               <div className="text-3xl font-black text-white mb-1">
-                {totalDownloadsNumber > 1000000
-                  ? `${(totalDownloadsNumber / 1000000).toFixed(1)}M+`
-                  : totalDownloadsNumber.toLocaleString()}
+                {overview.total_downloads > 1000000
+                  ? `${(overview.total_downloads / 1000000).toFixed(1)}M+`
+                  : overview.total_downloads.toLocaleString()}
               </div>
               <p className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
-                <TrendingUp className="w-3.5 h-3.5" /> +16.8% all-time growth
+                <TrendingUp className="w-3.5 h-3.5" /> Real database count
               </p>
             </div>
 
@@ -122,9 +125,11 @@ export default function AdminDownloadsPage() {
                 </span>
                 <Calendar className="w-5 h-5 text-primary-400" />
               </div>
-              <div className="text-3xl font-black text-white mb-1">1,420</div>
-              <p className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
-                <TrendingUp className="w-3.5 h-3.5" /> +8.5% vs yesterday
+              <div className="text-3xl font-black text-white mb-1">
+                {overview.downloads_today.toLocaleString()}
+              </div>
+              <p className="text-xs text-primary-400 font-medium">
+                Past 24 hours activity
               </p>
             </div>
 
@@ -135,8 +140,10 @@ export default function AdminDownloadsPage() {
                 </span>
                 <Calendar className="w-5 h-5 text-indigo-400" />
               </div>
-              <div className="text-3xl font-black text-white mb-1">17,050</div>
-              <p className="text-xs text-gray-400">Weekly average: 15,200</p>
+              <div className="text-3xl font-black text-white mb-1">
+                {overview.downloads_this_week.toLocaleString()}
+              </div>
+              <p className="text-xs text-gray-400">Past 7 days volume</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-surface-850 border border-surface-700/60 shadow-lg">
@@ -146,9 +153,11 @@ export default function AdminDownloadsPage() {
                 </span>
                 <Layers className="w-5 h-5 text-amber-400" />
               </div>
-              <div className="text-3xl font-black text-white mb-1">68,400</div>
+              <div className="text-3xl font-black text-white mb-1">
+                {overview.downloads_this_month.toLocaleString()}
+              </div>
               <p className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
-                <TrendingUp className="w-3.5 h-3.5" /> +12.3% vs last month
+                <TrendingUp className="w-3.5 h-3.5" /> Past 30 days
               </p>
             </div>
           </div>
@@ -160,30 +169,33 @@ export default function AdminDownloadsPage() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-base font-bold text-white">Daily Traffic Trends (Past 7 Days)</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Distribution count across all verified links</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Direct + External download requests logged</p>
                 </div>
               </div>
 
               <div className="h-56 flex items-end justify-between gap-3 pt-6 px-2 border-b border-surface-700/50">
-                {WEEKLY_TREND.map((item) => (
-                  <div
-                    key={item.day}
-                    className="flex-1 flex flex-col items-center gap-2 group h-full justify-end"
-                  >
-                    <div className="relative w-full flex justify-center h-full items-end">
-                      <div className="absolute -top-8 px-2 py-1 rounded bg-surface-900 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg whitespace-nowrap">
-                        {item.count.toLocaleString()} dl
+                {weeklyTrends.map((item) => {
+                  const heightPercent = maxWeeklyCount > 0 ? Math.max((item.count / maxWeeklyCount) * 100, 8) : 8
+                  return (
+                    <div
+                      key={item.date}
+                      className="flex-1 flex flex-col items-center gap-2 group h-full justify-end"
+                    >
+                      <div className="relative w-full flex justify-center h-full items-end">
+                        <div className="absolute -top-8 px-2 py-1 rounded bg-surface-900 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg whitespace-nowrap">
+                          {item.count.toLocaleString()} dl ({item.date})
+                        </div>
+                        <div
+                          style={{ height: `${heightPercent}%` }}
+                          className="w-full max-w-[36px] rounded-t-md bg-gradient-to-t from-emerald-700 via-emerald-500 to-teal-400 group-hover:brightness-125 transition-all shadow-md group-hover:shadow-emerald-500/30"
+                        />
                       </div>
-                      <div
-                        style={{ height: item.height }}
-                        className="w-full max-w-[36px] rounded-t-md bg-gradient-to-t from-emerald-700 via-emerald-500 to-teal-400 group-hover:brightness-125 transition-all shadow-md group-hover:shadow-emerald-500/30"
-                      />
+                      <span className="text-xs font-medium text-gray-400 group-hover:text-emerald-300 transition-colors">
+                        {item.day}
+                      </span>
                     </div>
-                    <span className="text-xs font-medium text-gray-400 group-hover:text-emerald-300 transition-colors">
-                      {item.day}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -195,10 +207,12 @@ export default function AdminDownloadsPage() {
 
                 <div className="space-y-4">
                   {licenseBreakdown.map((item) => (
-                    <div key={item.type} className="space-y-1.5">
+                    <div key={item.license} className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="text-gray-200">{item.type}</span>
-                        <span className="text-primary-300 font-mono">{item.percentage}%</span>
+                        <span className="text-gray-200">{item.license}</span>
+                        <span className="text-primary-300 font-mono">
+                          {item.count.toLocaleString()} ({item.percentage}%)
+                        </span>
                       </div>
                       <div className="h-2 rounded-full bg-surface-900 overflow-hidden border border-surface-750">
                         <div
@@ -211,8 +225,9 @@ export default function AdminDownloadsPage() {
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-surface-900/60 border border-surface-750 text-xs text-gray-400 mt-6">
-                Free-to-Play and Open Source titles account for the majority of user traffic.
+              <div className="p-3 rounded-xl bg-surface-900/60 border border-surface-750 text-xs text-gray-400 mt-6 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                100% of tracked games use legal distribution channels.
               </div>
             </div>
           </div>
@@ -235,7 +250,6 @@ export default function AdminDownloadsPage() {
               {leaderboard.map((game, index) => {
                 const cover =
                   game.cover_image ||
-                  game.image ||
                   'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=150&q=80'
 
                 return (
@@ -289,8 +303,76 @@ export default function AdminDownloadsPage() {
               })}
             </div>
           </div>
+
+          {/* Recent Download Logs */}
+          <div className="p-6 rounded-2xl bg-surface-850 border border-surface-700/60 shadow-lg space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-primary-500/10 border border-primary-500/20 text-primary-400 flex items-center justify-center">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Recent Download Requests</h3>
+                <p className="text-xs text-gray-400">Real-time audit log from `downloads` database table</p>
+              </div>
+            </div>
+
+            {recentDownloads.length === 0 ? (
+              <p className="text-xs text-gray-500 py-4 text-center">No downloads logged yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-surface-750 text-gray-400 uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="py-2.5 px-3">Game Title</th>
+                      <th className="py-2.5 px-3">Type</th>
+                      <th className="py-2.5 px-3">User / Requester</th>
+                      <th className="py-2.5 px-3">IP Address</th>
+                      <th className="py-2.5 px-3 text-right">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-800 text-gray-300">
+                    {recentDownloads.map((log) => (
+                      <tr key={log.id} className="hover:bg-surface-800/50 transition-colors">
+                        <td className="py-3 px-3 font-semibold text-white flex items-center gap-2">
+                          <span className="truncate max-w-[200px]">{log.game_title}</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase ${
+                              log.download_type === 'direct'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                            }`}
+                          >
+                            {log.download_type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          {log.user ? (
+                            <span className="flex items-center gap-1.5 text-primary-300 font-medium">
+                              <User className="w-3.5 h-3.5" />
+                              {log.user.name}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500 italic">Guest visitor</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-gray-400">
+                          {log.ip_address || '—'}
+                        </td>
+                        <td className="py-3 px-3 text-right text-gray-400 font-mono">
+                          {new Date(log.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   )
 }
+

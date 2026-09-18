@@ -34,6 +34,8 @@ class AdminGameResource extends JsonResource
             'developer' => $this->developer,
             'publisher' => $this->publisher,
             'game_type' => $this->game_type,
+            'download_type' => $this->download_type ?: 'external',
+            'direct_download_url' => $this->direct_download_url,
             'release_date' => $this->release_date?->format('Y-m-d'),
             'version' => $this->version,
             'file_size' => $this->file_size,

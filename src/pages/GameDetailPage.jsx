@@ -23,6 +23,7 @@ import SimilarGames from '../components/SimilarGames'
 import HeroSkeleton from '../components/HeroSkeleton'
 import ErrorState from '../components/ErrorState'
 import { getGameBySlug } from '../services/gameService'
+import { formatDownloadCount } from '../utils/gameNormalizer'
 
 export default function GameDetailPage() {
   const { slug } = useParams()
@@ -392,7 +393,20 @@ export default function GameDetailPage() {
       </div>
 
       {/* 4. Download & Installation Section */}
-      <DownloadSection game={game} />
+      <DownloadSection
+        game={game}
+        onDownloadCountUpdated={(newCount) => {
+          setGame((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  downloadCount: newCount,
+                  downloads: formatDownloadCount(newCount),
+                }
+              : prev
+          )
+        }}
+      />
 
       {/* 5. Similar Games Section */}
       <SimilarGames currentSlug={game.slug} />
