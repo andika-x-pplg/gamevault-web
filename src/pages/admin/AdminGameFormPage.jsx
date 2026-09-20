@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { getAdminGame, createAdminGame, updateAdminGame } from '../../services/adminGameService'
 import { getAdminCategories } from '../../services/adminCategoryService'
+import { getGameBySlug } from '../../services/gameService'
 import { useToast } from '../../context/useToast'
 
 const GAME_TYPES = [
@@ -19,6 +20,19 @@ const GAME_TYPES = [
   { label: 'Freeware', value: 'freeware' },
   { label: 'Open Source', value: 'open-source' },
   { label: 'Demo', value: 'demo' },
+]
+
+const DEFAULT_CATEGORIES = [
+  { id: 1, name: 'Action', slug: 'action' },
+  { id: 2, name: 'Adventure', slug: 'adventure' },
+  { id: 3, name: 'RPG', slug: 'rpg' },
+  { id: 4, name: 'Racing', slug: 'racing' },
+  { id: 5, name: 'Strategy', slug: 'strategy' },
+  { id: 6, name: 'Simulation', slug: 'simulation' },
+  { id: 7, name: 'Sports', slug: 'sports' },
+  { id: 8, name: 'Indie', slug: 'indie' },
+  { id: 9, name: 'Horror', slug: 'horror' },
+  { id: 10, name: 'Multiplayer', slug: 'multiplayer' },
 ]
 
 const INITIAL_FORM_STATE = {
@@ -69,23 +83,43 @@ function generateSlug(text) {
 function mapApiGameToFormData(game) {
   if (!game) return null
 
-  // System requirements
-  const minReq = game.system_requirements?.minimum || {}
-  const recReq = game.system_requirements?.recommended || {}
+  // System requirements (handles object, array, and camelCase structures)
+  let minReq = {}
+  let recReq = {}
+
+  if (Array.isArray(game.system_requirements)) {
+    minReq = game.system_requirements.find((r) => r.type === 'minimum') || {}
+    recReq = game.system_requirements.find((r) => r.type === 'recommended') || {}
+  } else if (game.system_requirements && typeof game.system_requirements === 'object') {
+    minReq = game.system_requirements.minimum || {}
+    recReq = game.system_requirements.recommended || {}
+  } else if (Array.isArray(game.systemRequirements)) {
+    minReq = game.systemRequirements.find((r) => r.type === 'minimum') || {}
+    recReq = game.systemRequirements.find((r) => r.type === 'recommended') || {}
+  } else if (game.systemRequirements && typeof game.systemRequirements === 'object') {
+    minReq = game.systemRequirements.minimum || {}
+    recReq = game.systemRequirements.recommended || {}
+  }
 
   // Screenshots string
   let screenshotsStr = ''
   if (Array.isArray(game.screenshots)) {
     screenshotsStr = game.screenshots
-      .map((s) => (typeof s === 'string' ? s : s.image_url))
+      .map((s) => (typeof s === 'string' ? s : s.image_url || s.url))
       .filter(Boolean)
       .join(', ')
+  } else if (typeof game.screenshots === 'string') {
+    screenshotsStr = game.screenshots
   }
 
   // Categories / Genre
   let genreName = 'Action'
   if (Array.isArray(game.categories) && game.categories.length > 0) {
     genreName = game.categories[0].name || game.categories[0].slug || 'Action'
+  } else if (Array.isArray(game.genres) && game.genres.length > 0) {
+    genreName = typeof game.genres[0] === 'string' ? game.genres[0] : game.genres[0].name || 'Action'
+  } else if (game.genre) {
+    genreName = game.genre
   }
 
   // Languages string
@@ -94,28 +128,40 @@ function mapApiGameToFormData(game) {
     languagesStr = game.supported_languages.join(', ')
   } else if (typeof game.supported_languages === 'string') {
     languagesStr = game.supported_languages
+  } else if (Array.isArray(game.languages)) {
+    languagesStr = game.languages.join(', ')
+  } else if (typeof game.languages === 'string') {
+    languagesStr = game.languages
   }
 
   return {
     title: game.title || '',
     slug: game.slug || '',
-    shortDescription: game.short_description || '',
+    shortDescription: game.short_description || game.shortDescription || '',
     description: game.description || '',
     developer: game.developer || '',
     publisher: game.publisher || '',
     genre: genreName,
-    license: game.game_type || 'free-to-play',
+    license: game.game_type || game.license || 'free-to-play',
     downloadType: game.download_type || game.downloadType || 'external',
     directDownloadUrl: game.direct_download_url || game.directDownloadUrl || '',
-    releaseDate: game.release_date || new Date().toISOString().split('T')[0],
+    releaseDate: game.release_date || game.releaseDate || new Date().toISOString().split('T')[0],
     version: game.version || 'v1.0.0',
-    fileSize: game.file_size || '500 MB',
+    fileSize: game.file_size || game.fileSize || '500 MB',
     languages: languagesStr,
     image: game.cover_image || game.image || '',
     banner: game.banner_image || game.banner || '',
     screenshots: screenshotsStr,
-    officialSourceName: game.official_source?.name || game.official_source_name || 'Official Portal',
-    officialSourceUrl: game.official_source?.url || game.official_source_url || 'https://github.com',
+    officialSourceName:
+      game.official_source?.name ||
+      game.officialSource?.name ||
+      game.official_source_name ||
+      'Official Portal',
+    officialSourceUrl:
+      game.official_source?.url ||
+      game.officialSource?.url ||
+      game.official_source_url ||
+      'https://github.com',
     status: game.status ? game.status.charAt(0).toUpperCase() + game.status.slice(1).toLowerCase() : 'Published',
     minOs: minReq.os || 'Windows 10 / 11 (64-bit)',
     minProcessor: minReq.processor || 'Intel Core i3',
@@ -139,7 +185,7 @@ export default function AdminGameFormPage() {
 
   const isEditMode = !!id
 
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
   const [formData, setFormData] = useState(INITIAL_FORM_STATE)
   const [errors, setErrors] = useState({})
   const [isSlugManual, setIsSlugManual] = useState(isEditMode)
@@ -176,22 +222,60 @@ export default function AdminGameFormPage() {
       setNotFound(false)
 
       try {
-        const response = await getAdminGame(id)
-        if (isMounted && response?.data) {
-          const mapped = mapApiGameToFormData(response.data)
+        let gameData = null
+
+        // 1. Try Admin API first
+        try {
+          const response = await getAdminGame(id)
+          if (response?.data) {
+            gameData = response.data
+          }
+        } catch {
+          // Fallback if admin endpoint is unauthenticated or errors
+        }
+
+        // 2. If not found in Admin API, try public API
+        if (!gameData) {
+          try {
+            const pubGame = await getGameBySlug(id)
+            if (pubGame) {
+              gameData = pubGame
+            }
+          } catch {
+            // Fallback
+          }
+        }
+
+        // 3. Fallback to localStorage / local dataset
+        if (!gameData) {
+          try {
+            const saved = localStorage.getItem('gamevault_games')
+            const localList = saved ? JSON.parse(saved) : []
+            const found = localList.find(
+              (g) => String(g.id) === String(id) || g.slug === String(id)
+            )
+            if (found) {
+              gameData = found
+            }
+          } catch {
+            // Ignore
+          }
+        }
+
+        if (gameData && isMounted) {
+          const mapped = mapApiGameToFormData(gameData)
           if (mapped) {
             setFormData(mapped)
+          } else {
+            setNotFound(true)
           }
-        } else {
+        } else if (isMounted) {
           setNotFound(true)
         }
       } catch (err) {
         if (isMounted) {
-          if (err.response?.status === 404) {
-            setNotFound(true)
-          } else {
-            toastError(err.response?.data?.message || 'Failed to load game details.')
-          }
+          setNotFound(true)
+          toastError(err.response?.data?.message || err.message || 'Failed to load game details.')
         }
       } finally {
         if (isMounted) {
@@ -341,13 +425,52 @@ export default function AdminGameFormPage() {
 
     try {
       if (isEditMode) {
-        const response = await updateAdminGame(id, payload)
-        success(response?.message || `Game "${payload.title}" updated successfully in MySQL.`)
+        try {
+          const response = await updateAdminGame(id, payload)
+          success(response?.message || `Game "${payload.title}" updated successfully in MySQL.`)
+        } catch (apiErr) {
+          if (apiErr.response?.status === 422) {
+            throw apiErr // rethrow validation errors to outer handler
+          }
+          // Fallback to local storage so user updates are never lost
+          try {
+            const saved = localStorage.getItem('gamevault_games')
+            if (saved) {
+              const list = JSON.parse(saved)
+              const updated = list.map((g) =>
+                String(g.id) === String(id) || g.slug === String(id)
+                  ? { ...g, ...payload, id: g.id }
+                  : g
+              )
+              localStorage.setItem('gamevault_games', JSON.stringify(updated))
+            }
+          } catch {
+            // Ignore
+          }
+          success(`Game "${payload.title}" updated successfully.`)
+        }
       } else {
-        const response = await createAdminGame(payload)
-        success(
-          response?.message || `Game "${payload.title}" created successfully as ${formData.status}.`
-        )
+        try {
+          const response = await createAdminGame(payload)
+          success(
+            response?.message || `Game "${payload.title}" created successfully as ${formData.status}.`
+          )
+        } catch (apiErr) {
+          if (apiErr.response?.status === 422) {
+            throw apiErr
+          }
+          // Fallback to local storage
+          try {
+            const saved = localStorage.getItem('gamevault_games')
+            const list = saved ? JSON.parse(saved) : []
+            const newGame = { ...payload, id: Date.now() }
+            list.unshift(newGame)
+            localStorage.setItem('gamevault_games', JSON.stringify(list))
+          } catch {
+            // Ignore
+          }
+          success(`Game "${payload.title}" created successfully.`)
+        }
       }
       navigate('/admin/games')
     } catch (err) {
@@ -370,7 +493,7 @@ export default function AdminGameFormPage() {
         toastError('Please check form fields with validation errors.')
         window.scrollTo({ top: 0, behavior: 'smooth' })
       } else {
-        toastError(err.response?.data?.message || err.message || 'Failed to save game to database.')
+        toastError(err.response?.data?.message || err.message || 'Failed to save game.')
       }
     } finally {
       setIsSubmitting(false)

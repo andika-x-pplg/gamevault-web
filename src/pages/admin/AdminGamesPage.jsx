@@ -61,12 +61,25 @@ function formatTypeLabel(type) {
   }
 }
 
+const DEFAULT_CATEGORIES = [
+  { id: 1, name: 'Action', slug: 'action' },
+  { id: 2, name: 'Adventure', slug: 'adventure' },
+  { id: 3, name: 'RPG', slug: 'rpg' },
+  { id: 4, name: 'Racing', slug: 'racing' },
+  { id: 5, name: 'Strategy', slug: 'strategy' },
+  { id: 6, name: 'Simulation', slug: 'simulation' },
+  { id: 7, name: 'Sports', slug: 'sports' },
+  { id: 8, name: 'Indie', slug: 'indie' },
+  { id: 9, name: 'Horror', slug: 'horror' },
+  { id: 10, name: 'Multiplayer', slug: 'multiplayer' },
+]
+
 export default function AdminGamesPage() {
   const { success, error: toastError } = useToast()
 
   // Games and Categories state
   const [games, setGames] = useState([])
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
   const [meta, setMeta] = useState({
     current_page: 1,
     last_page: 1,

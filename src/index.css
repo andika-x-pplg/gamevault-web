@@ -20,4 +20,22 @@
     padding: 0;
     min-height: 100vh;
   }
+
+  /* Ensure select options have dark background and high-contrast readable white text */
+  select option {
+    background-color: #161f33 !important;
+    color: #f8fafc !important;
+    padding: 8px 12px;
+  }
+
+  select option:checked {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+  }
+
+  select option:hover {
+    background-color: #232f4a !important;
+    color: #ffffff !important;
+  }
 }
+
