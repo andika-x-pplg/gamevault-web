@@ -9,6 +9,8 @@ import {
   Info,
   ShieldAlert,
   Loader2,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react'
 import { getAdminGame, createAdminGame, updateAdminGame } from '../../services/adminGameService'
 import { getAdminCategories } from '../../services/adminCategoryService'
@@ -48,10 +50,9 @@ const INITIAL_FORM_STATE = {
   version: 'v1.0.0',
   fileSize: '500 MB',
   languages: 'English, Indonesian',
-  image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
-  banner: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80',
-  screenshots:
-    'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1200&q=80, https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80',
+  image: '',
+  banner: '',
+  screenshots: '',
   officialSourceName: 'Official Portal',
   officialSourceUrl: 'https://github.com',
   downloadType: 'external',
@@ -392,13 +393,12 @@ export default function AdminGameFormPage() {
         .split(',')
         .map((l) => l.trim())
         .filter(Boolean),
-      cover_image:
-        formData.image.trim() ||
-        'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80',
-      banner_image:
-        formData.banner.trim() ||
-        'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1600&q=80',
-      screenshots: screenshotsList.length > 0 ? screenshotsList : [formData.image],
+      cover_image: formData.image.trim(),
+      banner_image: formData.banner.trim() || formData.image.trim(),
+      screenshots:
+        screenshotsList.length > 0
+          ? screenshotsList
+          : [formData.banner.trim(), formData.image.trim()].filter(Boolean),
       status: formData.status.toLowerCase(),
       official_source_name: formData.officialSourceName.trim() || 'Official Distribution Source',
       official_source_url: formData.officialSourceUrl.trim() || 'https://github.com',
@@ -907,18 +907,91 @@ export default function AdminGameFormPage() {
           </div>
 
           {/* Screenshots */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-              Screenshot URLs (Separated by comma)
-            </label>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                Screenshot URLs (Separated by comma)
+              </label>
+              <div className="flex items-center gap-2">
+                {(formData.banner || formData.image) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const syncd = [formData.banner.trim(), formData.image.trim()]
+                        .filter(Boolean)
+                        .join(', ')
+                      setFormData((prev) => ({ ...prev, screenshots: syncd }))
+                    }}
+                    className="text-[11px] text-primary-400 hover:text-primary-300 hover:underline cursor-pointer"
+                  >
+                    Gunakan Cover & Banner
+                  </button>
+                )}
+                {formData.screenshots && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, screenshots: '' }))}
+                    className="text-[11px] text-rose-400 hover:text-rose-300 hover:underline cursor-pointer"
+                  >
+                    Kosongkan
+                  </button>
+                )}
+              </div>
+            </div>
             <textarea
               name="screenshots"
               rows={2}
               value={formData.screenshots}
               onChange={handleChange}
-              placeholder="https://..., https://..."
+              placeholder="https://images.example.com/shot1.jpg, https://images.example.com/shot2.jpg"
               className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-white font-mono text-xs focus:outline-none focus:border-primary-500"
             />
+
+            {/* Screenshots Live Thumbnail Previews */}
+            {formData.screenshots && formData.screenshots.trim() && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] text-gray-400 font-medium">
+                  Preview Screenshots ({formData.screenshots.split(',').filter((s) => s.trim()).length} gambar):
+                </span>
+                <div className="flex flex-wrap gap-2.5">
+                  {formData.screenshots
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="group relative w-24 h-16 rounded-xl overflow-hidden border border-surface-700 bg-surface-900 shadow"
+                      >
+                        <img
+                          src={url}
+                          alt={`Screenshot ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src =
+                              'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = formData.screenshots
+                              .split(',')
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                            const newList = currentList.filter((_, i) => i !== idx)
+                            setFormData((prev) => ({ ...prev, screenshots: newList.join(', ') }))
+                          }}
+                          className="absolute top-1 right-1 p-1 rounded-md bg-rose-900/90 text-rose-200 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-800"
+                          title="Hapus screenshot ini"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
