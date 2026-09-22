@@ -1,9 +1,9 @@
 import api from './api'
 import axios from 'axios'
 
-// Derive backend root origin (e.g. http://127.0.0.1:8000) from VITE_API_BASE_URL
+// Derive backend root origin (e.g. http://localhost:8000) from VITE_API_BASE_URL
 const getBaseOrigin = () => {
-  const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
   return apiUrl.replace(/\/api\/?$/, '')
 }
 

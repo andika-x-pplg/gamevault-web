@@ -11,6 +11,7 @@ import {
   Loader2,
   Trash2,
   RefreshCw,
+  Check,
 } from 'lucide-react'
 import { getAdminGame, createAdminGame, updateAdminGame } from '../../services/adminGameService'
 import { getAdminCategories } from '../../services/adminCategoryService'
@@ -45,6 +46,7 @@ const INITIAL_FORM_STATE = {
   developer: '',
   publisher: '',
   genre: 'Action',
+  categories: ['Action'],
   license: 'free-to-play',
   releaseDate: new Date().toISOString().split('T')[0],
   version: 'v1.0.0',
@@ -114,14 +116,18 @@ function mapApiGameToFormData(game) {
   }
 
   // Categories / Genre
-  let genreName = 'Action'
+  let selectedCategories = []
   if (Array.isArray(game.categories) && game.categories.length > 0) {
-    genreName = game.categories[0].name || game.categories[0].slug || 'Action'
+    selectedCategories = game.categories.map((c) => (typeof c === 'string' ? c : c.name || c.slug)).filter(Boolean)
   } else if (Array.isArray(game.genres) && game.genres.length > 0) {
-    genreName = typeof game.genres[0] === 'string' ? game.genres[0] : game.genres[0].name || 'Action'
+    selectedCategories = game.genres.map((g) => (typeof g === 'string' ? g : g.name || g.slug)).filter(Boolean)
   } else if (game.genre) {
-    genreName = game.genre
+    selectedCategories = typeof game.genre === 'string' ? game.genre.split(',').map((g) => g.trim()).filter(Boolean) : [game.genre]
   }
+  if (selectedCategories.length === 0) {
+    selectedCategories = ['Action']
+  }
+  const genreName = selectedCategories[0] || 'Action'
 
   // Languages string
   let languagesStr = 'English, Indonesian'
@@ -143,6 +149,7 @@ function mapApiGameToFormData(game) {
     developer: game.developer || '',
     publisher: game.publisher || '',
     genre: genreName,
+    categories: selectedCategories,
     license: game.game_type || game.license || 'free-to-play',
     downloadType: game.download_type || game.downloadType || 'external',
     directDownloadUrl: game.direct_download_url || game.directDownloadUrl || '',
@@ -310,6 +317,29 @@ export default function AdminGameFormPage() {
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }))
   }
 
+  // Handle toggle category
+  const handleToggleCategory = (catName) => {
+    setFormData((prev) => {
+      const current = prev.categories || []
+      let next
+      if (current.includes(catName)) {
+        // Jangan biarkan kosong sama sekali jika hanya 1 yang dipilih
+        if (current.length === 1) return prev
+        next = current.filter((c) => c !== catName)
+      } else {
+        next = [...current, catName]
+      }
+      return {
+        ...prev,
+        categories: next,
+        genre: next[0] || 'Action',
+      }
+    })
+    if (errors.categories || errors.genre) {
+      setErrors((prev) => ({ ...prev, categories: null, genre: null }))
+    }
+  }
+
   // Form validation
   const validateForm = () => {
     const newErrors = {}
@@ -324,7 +354,7 @@ export default function AdminGameFormPage() {
     if (!formData.shortDescription.trim()) newErrors.shortDescription = 'Short description is required.'
     if (!formData.description.trim()) newErrors.description = 'Full description is required.'
     if (!formData.developer.trim()) newErrors.developer = 'Developer name is required.'
-    if (!formData.genre) newErrors.genre = 'Genre classification is required.'
+    if (!formData.categories || formData.categories.length === 0) newErrors.categories = 'At least one category is required.'
     if (!formData.license) newErrors.license = 'Game Type is required.'
     if (!formData.version.trim()) newErrors.version = 'Version string is required.'
     if (!formData.fileSize.trim()) newErrors.fileSize = 'File size is required.'
@@ -402,7 +432,7 @@ export default function AdminGameFormPage() {
       status: formData.status.toLowerCase(),
       official_source_name: formData.officialSourceName.trim() || 'Official Distribution Source',
       official_source_url: formData.officialSourceUrl.trim() || 'https://github.com',
-      categories: [formData.genre],
+      categories: formData.categories && formData.categories.length > 0 ? formData.categories : [formData.genre],
       system_requirements: {
         minimum: {
           os: formData.minOs,
@@ -727,25 +757,42 @@ export default function AdminGameFormPage() {
             <h3 className="text-lg font-bold text-white">2. Classification & Technical Details</h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Genre */}
-            <div className="space-y-1.5">
+          {/* Categories Multi-Select */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                Primary Category <span className="text-rose-400">*</span>
+                Categories <span className="text-rose-400">*</span>
               </label>
-              <select
-                name="genre"
-                value={formData.genre}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-xl text-sm text-white focus:outline-none focus:border-primary-500 cursor-pointer"
-              >
-                {categories.map((c) => (
-                  <option key={c.id || c.slug} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <span className="text-xs text-gray-400">
+                {(formData.categories || []).length} selected (Klik untuk memilih lebih dari satu)
+              </span>
             </div>
+            <div className="p-3 bg-surface-900 border border-surface-700 rounded-xl space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {categories.map((c) => {
+                  const isSelected = (formData.categories || []).includes(c.name)
+                  return (
+                    <button
+                      key={c.id || c.slug}
+                      type="button"
+                      onClick={() => handleToggleCategory(c.name)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        isSelected
+                          ? 'bg-primary-600 text-white shadow-sm ring-1 ring-primary-400 font-semibold'
+                          : 'bg-surface-800 text-gray-400 hover:text-gray-200 hover:bg-surface-750 border border-surface-700/60'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                      {c.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            {errors.categories && <p className="text-xs text-rose-400">{errors.categories}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
             {/* Game Type / License */}
             <div className="space-y-1.5">
